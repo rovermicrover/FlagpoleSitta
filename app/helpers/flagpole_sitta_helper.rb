@@ -1,45 +1,63 @@
 module FlagpoleSittaHelper
 
   def update_index_array_cache model, key
-    model.try(:update_index_array_cache, key)
+    model.try(:update_array_cache, key)
   end
 
   def update_show_array_cache model, key, route_id
-    model.try(:update_show_array_cache, key, route_id)
+    model.try(:update_array_cache, key, route_id)
   end
 
   #AR - cache_sitta helper
-
   #NOTE This is not safe for .builder xml files.
-
-  #Options are for cache_sitta
-  
-  #key_args, passed to route_id if its a proc or lamdba
-  #all args must be passed in this manner if proc or lamdba
-  #so start your proc or lamdba with |options = {}|
-
-  #call_args, passed to call_path if its a proc of lamdba
-  #all args must be passed in this manner if proc or lamdba
-  #so start your proc or lamdba with |options = {}|
-
-  #models_in_index
+  #Options
+  #-------
+  #:section
+  #The section of the page the cache represents. This is
+  #best used in connection with -content_for. Can be any
+  #string you want it to be. If not provided will default to
+  #body. Also looks for the calls using sections. Will assume calls
+  #are in the instance variable '@#{options[:section]_calls'
+  #-------
+  #:model
+  #The model of the object, or objects that you want to link
+  #the cache too. Pass the actually model, or an array of models.
+  #Must also have a corresponding route_id. If model is an array, 
+  #route_id must also be an array of equal length. model[i] is 
+  #connected to route_id[i].
+  #-------
+  #:route_id
+  #The unique identifier of the object, most likely what you route on
+  #for showing the object or objects that you want to link
+  #the cache too. Pass as a string, or an array of strings.
+  #Must also have a corresponding model. If route_id is an array, 
+  #model must also be an array of equal length. model[i] is 
+  #connected to route_id[i].
+  #-------
+  #:models_in_index
   #Use this if the fragment you are rendering is an index
   #pass it all the different types of models/classes could be
   #included in the index. All the include classes must have cache
   #sitta enabled. The cache for the used index pages will then be
   #wiped clear when anyone of these models/classes has an object
   #created or updated.
+  #-------
+  #:index_only
+  #Use this if the cache should not be associated with any object,
+  #but rather only a model. Use this if your cache is an index, or
+  #can be 'random'.
+  #-------
+  #:sub_route_id
+  #Use this if options on the url can result in a difference in
+  #the cache. So if you had an page where you could pass
+  #in a year and month would be a great place for this.
+  #That way your caching each possible version of the page
+  #instead of just one.
+  #-------
+  #:calls_args
+  #Any args you want to pass to your calls. Can only take one argument.
+  #The best idea is to pass an option hash.
   def cache_sitta  options={}, &block
-
-    #AR - If its a string, then just use that value, other wise it
-    #assumes that the route_id is a proc or lamdba and call its
-    #with the provide args.
-
-    if options[:route_id_args]
-      options[:route_id] = options[:route_id].call(options[:route_id_args])
-    elsif options[:route_id].class.eql?(Proc)
-      options[:route_id] = options[:route_id].call()
-    end
 
     if options[:route_id].class.eql?(Array)
       main_route_id = options[:route_id][0]
@@ -47,21 +65,7 @@ module FlagpoleSittaHelper
       main_route_id = options[:route_id]
     end
 
-
-    #Use subroute idea if the view can differ on things like current day, or any type of passed params that can effect how
-    #the page will look.
-    if options[:sub_route_id_args]
-      options[:sub_route_id] = options[:sub_route_id].call(options[:sub_route_id_args])
-    elsif options[:sub_route_id_args].class.eql?(Proc)
-      options[:sub_route_id] = options[:sub_route_id].call()
-    end
-
     if options[:model]
-      if options[:model_args]
-        options[:model] = options[:model].call(options[:model_args])
-      elsif options[:model].class.eql?(Proc)
-        options[:model] = options[:model].call()
-      end
 
       if options[:model].class.eql?(Array)
         main_model = options[:model][0]
@@ -115,7 +119,7 @@ module FlagpoleSittaHelper
         if calls
           calls.each do |c|
             if instance_variable_get("@#{c[0]}").nil?
-              if options[:calls_args]
+              if options[:calls_args] && (c.parameters.length > 0)
                 instance_variable_set("@#{c[0]}", c[1].call(options[:calls_args]))
               else
                 instance_variable_set("@#{c[0]}", c[1].call())
