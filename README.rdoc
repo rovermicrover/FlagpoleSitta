@@ -119,3 +119,5 @@ More examples to come in the wiki, and in the coming example app.
 
 ===This gem should be considered in early beta and highly unstable. Do not use in a production app!
 
+MIT License 
+
