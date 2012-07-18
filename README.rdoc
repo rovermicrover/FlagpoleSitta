@@ -1,0 +1,121 @@
+= FlagpoleSitta
+
+I had visions, I was in them,
+
+I was looking into the mirror
+
+To see a little bit clearer
+
+The rottenness and evil in me.
+
+♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫
+
+== Preface
+
+===This gem should be considered in early beta and highly unstable. Do not use in a production app!
+
+This gem was inspired in part by the song Flagpole Sitta by Harvey Danger. So if you like the gem and are wanting to help out please either donate your time and submits some patches, or donate to the band who wrote the song. They put there last two albums out there all open source like, only asking that those that could donate after downloading. While your donating, if you choose to do so, don't be afraid to download there albums, its good stuff!
+
+http://www.harveydanger.com/contribute.php
+
+Another note on a personal level, I have some learning disabilities that make it so I frequently make grammar mistake, and once and a while just drop random articles out of my sentences. All this only happens when writing. So if something doesn't make sense in the docs don't be afraid to point it out or submit a patch. Because to me it all looks right.....
+
+This gem has also only so far been tested with memcache using the Dalli adapter. File System caching and memory caching are not recommended.Redis/Memcache are defiantly suggested and strongly encouraged for this gem.
+
+== Installation
+
+For now add the following line to your gemfile
+
+gem 'flagpole_sitta', :git => "git://github.com/rovermicrover/FlagpoleSitta.git"
+
+Then bundle install.
+
+== About
+
+Flagpole Sitta is a gem that main purpose is to make it easier to effectively fragment cache in dynamic fashions in Rails.
+
+When ever a cache is created it is associated with any model and/or record you tell it to be from the view helper method. When that model and/or record is updated all it's associated cache's are cleared. 
+
+Flagpole also expects you to put all your database calls into Procs/Lamdbas. This makes it so that your database calls wont have to happen unless your cache hasn't been created. Thus speeding up response time and reducing database traffic.
+
+For a simple application you could do something like this.
+
+=== PageModel
+
+  cache_sitta :route_id => "url"
+
+=== PagesController
+
+  def show
+
+    @page_call = lambda {
+      if params[:url]
+        @page = Page.find_by_url params[:url]
+      else
+        @page = Page.find_by_url 'home'
+      end
+    }
+
+    @body_calls = [
+      ['page', @page_call]
+    ]
+
+  end
+
+=== show.haml for Pages
+
+  - cache_sitta :model => Page, :route_id => params[:url], :section => "body" do
+    = @page.content.try(:html_safe)
+
+First off lets look at @body_calls. The if you don't provide cache_sitta :calls, then it will look for @#{:section}_calls. So in this case it will look for @body_calls.
+
+Second off @body_calls is an array of arrays. This is because you can have multiple calls, and each call must be given a target instance variable ('page') and a call object (@page_call). So in this instance the cache_sitta helper will do 
+
+    @page = @page_call.call
+
+You can also pass your calls options by providing :calls_args to the helper. You must though set up your calls to expect an options hash.
+
+:route_id and :model must be provide so that the cache can be associated with the correct object, and the cache clear when its supposed to.
+
+:route_id must also be a unquie field on the model, other wise the cache won't connect properly to the object.
+
+For an index page you could do something like the following for a simple app.
+
+=== BlogModel
+
+  cache_sitta :route_id => "url"
+
+=== BlogsController
+
+  def index
+
+    @blogs_call = lambda {
+      @blogs = Blog.all
+    }
+
+    @body_calls = [
+      ['blogs', @blogs_call]
+    ]
+
+  end
+
+=== index.haml for Blogs
+
+  - cache_sitta :models_in_index => Blog, :index_only => true, :section => "body" do
+    - @blogs.each do |blog|
+      = blog.title
+      etc
+      etc
+
+First notice you don't have to pass :route_id if you pass :index_only => true. And you don't have to pass :model if you pass :models_in_index.
+
+:models_in_index tells the helper which Model to associated with the index, so if any objects in that model update the index cache gets nuked.
+
+:index_only => true, tells the helper to not bother trying to associated this cache with anyone item in particular.
+
+== Footer
+
+More examples to come in the wiki, and in the coming example app.
+
+===This gem should be considered in early beta and highly unstable. Do not use in a production app!
+
