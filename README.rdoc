@@ -20,7 +20,7 @@ http://www.harveydanger.com/contribute.php
 
 My grammar ability's are fail. So if something doesn't make sense in the docs don't be afraid to point it out and/or submit a patch. Because to me it all looks right.....
 
-This gem has also only so far been tested with Memcache using the Dalli gem. File System caching and memory caching are not recommended.Redis/Memcache are defiantly suggested and strongly encouraged for this gem.
+This gem has also only so far been tested with Memcache using the Dalli gem. File System caching and memory caching are not recommended. Redis/Memcache are defiantly suggested and strongly encouraged for this gem.
 
 == Installation
 
