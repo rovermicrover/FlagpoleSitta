@@ -28,7 +28,7 @@ My insperation for this project came from the following post on github
 
 http://stackoverflow.com/a/1035832/1436131
 
-On a project I was doing thing like the OP was, which of course has a chance of failure if between the controller and the view the cache expires or is deleted.
+On a project I was handling things like the OP was, which of course has a chance of failure if between the controller and the view the cache expires or is deleted.
 
 That post also lead me to the following depericated ruby gem.
 
