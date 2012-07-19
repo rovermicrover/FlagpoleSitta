@@ -22,6 +22,22 @@ My grammar ability's are fail. So if something doesn't make sense in the docs do
 
 This gem has also only so far been tested with Memcache using the Dalli gem. File System caching and memory caching are not recommended. Redis/Memcache are defiantly suggested and strongly encouraged for this gem.
 
+== Inspiration
+
+My insperation for this project came from the following post on github
+
+http://stackoverflow.com/a/1035832/1436131
+
+On a project I was doing thing like the OP was, which of course has a chance of failure if between the controller and the view the cache expires or is deleted.
+
+That post also lead me to the following depericated ruby gem.
+
+https://github.com/evan/interlock
+
+I looked at it and decided it didn't meet my needs even if I where to get it updated. Which lead me to decided to create my own.
+
+PS feel free to vote up the above answer on stackoverflow, I know I have!
+
 == Installation
 
 Very simple, in your gemfile
