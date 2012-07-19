@@ -9,9 +9,9 @@ module FlagpoleSitta
         @_route_id || (self.superclass.respond_to?(:route_id) ? self.superclass.route_id : nil)  || "id"
       end
 
-      def has_existance_hash options = {}
+      def has_existence_hash options = {}
         @_route_id ||= options[:route_id] ? options[:route_id].to_s : @_route_id
-        include FlagpoleSitta::ExistanceHash
+        include FlagpoleSitta::ExistenceHash
       end
 
       def has_brackets_retrieval options = {}

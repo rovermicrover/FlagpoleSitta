@@ -1,11 +1,8 @@
 = FlagpoleSitta
 
 I had visions, I was in them,
-
 I was looking into the mirror
-
 To see a little bit clearer
-
 The rottenness and evil in me.
 
 ♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫~♫
@@ -14,27 +11,31 @@ The rottenness and evil in me.
 
 ===This gem should be considered in early beta and highly unstable. Do not use in a production app!
 
-This gem was inspired in part by the song Flagpole Sitta by Harvey Danger. So if you like the gem and are wanting to help out please either donate your time and submits some patches, or donate to the band who wrote the song. They put there last two albums out there all open source like, only asking that those that could donate after downloading. While your donating, if you choose to do so, don't be afraid to download there albums, its good stuff!
+This gem was inspired in part by the song Flagpole Sitta by Harvey Danger. So if you like the gem and are wanting to help out please either donate your time and submit some patches, or donate to the band who wrote the song. They put there last two albums out there all open source like, only asking that those that could donate after downloading. While your donating, if you choose to do so, don't be afraid to download their albums, its good stuff!
 
 http://www.harveydanger.com/contribute.php
 
-Another note on a personal level, I have some learning disabilities that make it so I frequently make grammar mistake, and once and a while just drop random articles out of my sentences. All this only happens when writing. So if something doesn't make sense in the docs don't be afraid to point it out or submit a patch. Because to me it all looks right.....
+My grammar ability's are fail. So if something doesn't make sense in the docs don't be afraid to point it out and/or submit a patch. Because to me it all looks right.....
 
-This gem has also only so far been tested with memcache using the Dalli adapter. File System caching and memory caching are not recommended.Redis/Memcache are defiantly suggested and strongly encouraged for this gem.
+This gem has also only so far been tested with Memcache using the Dalli gem. File System caching and memory caching are not recommended.Redis/Memcache are defiantly suggested and strongly encouraged for this gem.
 
 == Installation
 
-For now add the following line to your gemfile
+Very simple, in your gemfile
 
-gem 'flagpole_sitta', :git => "git://github.com/rovermicrover/FlagpoleSitta.git"
+  gem 'flagpole_sitta'
+
+OR
+
+  gem 'flagpole_sitta', :git => "git://github.com/rovermicrover/FlagpoleSitta.git"
 
 Then bundle install.
 
-== About
+== cache_sitta
 
-Flagpole Sitta is a gem that main purpose is to make it easier to effectively fragment cache in dynamic fashions in Rails.
+Flagpole Sitta is a gem thats main purpose is to make it easier to effectively fragment cache in dynamic fashions in Rails.
 
-When ever a cache is created it is associated with any model and/or record you tell it to be from the view helper method. When that model and/or record is updated all it's associated cache's are cleared. 
+When ever a cache is created it is associated with any model and/or record you tell it to be from the view helper method. When that model and/or record is updated all it's associated caches are cleared. 
 
 Flagpole also expects you to put all your database calls into Procs/Lamdbas. This makes it so that your database calls wont have to happen unless your cache hasn't been created. Thus speeding up response time and reducing database traffic.
 
@@ -42,23 +43,31 @@ For a simple application you could do something like this.
 
 === PageModel
 
-  cache_sitta :route_id => "url"
+  class Page < ActiveRecord::Base
+
+    cache_sitta :route_id => "url"
+
+  end
 
 === PagesController
 
-  def show
+  class PagesController < ApplicationController
 
-    @page_call = lambda {
-      if params[:url]
-        @page = Page.find_by_url params[:url]
-      else
-        @page = Page.find_by_url 'home'
-      end
-    }
+    def show
 
-    @body_calls = [
-      ['page', @page_call]
-    ]
+      @page_call = lambda {
+        if params[:url]
+          @page = Page.find_by_url params[:url]
+        else
+          @page = Page.find_by_url 'home'
+        end
+      }
+
+      @body_calls = [
+        ['page', @page_call]
+      ]
+
+    end
 
   end
 
@@ -67,7 +76,7 @@ For a simple application you could do something like this.
   - cache_sitta :model => Page, :route_id => params[:url], :section => "body" do
     = @page.content.try(:html_safe)
 
-First off lets look at @body_calls. The if you don't provide cache_sitta :calls, then it will look for @#{:section}_calls. So in this case it will look for @body_calls.
+First off lets look at @body_calls. If you don't provide cache_sitta :calls, then it will look for @#{:section}_calls. So in this case it will look for @body_calls.
 
 Second off @body_calls is an array of arrays. This is because you can have multiple calls, and each call must be given a target instance variable ('page') and a call object (@page_call). So in this instance the cache_sitta helper will do 
 
@@ -83,19 +92,27 @@ For an index page you could do something like the following for a simple app.
 
 === BlogModel
 
-  cache_sitta :route_id => "url"
+  class Blog < ActiveRecord::Base
+
+    cache_sitta
+
+  end
 
 === BlogsController
 
-  def index
+  class BlogsController < ApplicationController
 
-    @blogs_call = lambda {
-      @blogs = Blog.all
-    }
+    def index
 
-    @body_calls = [
-      ['blogs', @blogs_call]
-    ]
+      @blogs_call = lambda {
+        @blogs = Blog.all
+      }
+
+      @body_calls = [
+        ['blogs', @blogs_call]
+      ]
+
+    end
 
   end
 
@@ -107,11 +124,77 @@ For an index page you could do something like the following for a simple app.
       etc
       etc
 
-First notice you don't have to pass :route_id if you pass :index_only => true. And you don't have to pass :model if you pass :models_in_index.
+First notice you don't have to pass :route_id and :model if you pass :index_only => true and :models_in_index.
+
+This also means if your just showing objects in an index you don't even have to worry about declaring a route_id(It just defaults to id anyway.)
 
 :models_in_index tells the helper which Model to associated with the index, so if any objects in that model update the index cache gets nuked.
 
 :index_only => true, tells the helper to not bother trying to associated this cache with anyone item in particular.
+
+== existence_hash
+
+If you might have already figured out the overall strategy of this gem has a weakness. Namely how do you deal with instances where, the object being routed to doesn't exist. See if your not querying the database until your already in the view then you can't exactly redirect with out some crazy stuff going on. You could put some if statements in your view to show a 404 if the objects are nil, but the  issue with that is that you would still end up with a bunch of pointless caches. This can all be avoided by creating a 'hash' in the cache which you can use to check for the existence of an object. This 'hash' too is updated on save/destory. Also the hash really isn't hash but rather a bunch of cache keys held together by a flag key. Lets use the page example from above.
+
+=== PageModel
+
+  class Page < ActiveRecord::Base
+
+    cache_sitta :route_id => "url"
+    has_existence_hash :route_id => "url"
+
+  end
+
+A quick note you only actually have to pass :route_id once if your using both cache_sitta and has_existence_hash. It uses the same class instance variable.
+
+=== PagesController
+
+  class PagesController < ApplicationController
+
+    if Page.get_existence_hash(params[:url])
+
+      def show
+
+        @page_call = lambda {
+          if params[:url]
+            @page = Page.find_by_url params[:url]
+          else
+            @page = Page.find_by_url 'home'
+          end
+        }
+
+        @body_calls = [
+          ['page', @page_call]
+        ]
+
+      end
+
+    else
+      redirect_to :action => 'home'
+      flash[:notice] = "The Page you are looking for doesn't exist"
+    end
+
+  end
+
+This will keep your cache safe from being filled with junk. Though this isn't the only way you can use the 'existence hash' to solve this problem. Another note is that the hash is created the first time that you call for it. If you have a enough objects this can take a while. So its suggest that you warm all 'existence hash'es just in case.
+
+== has_brackets_retrieval
+
+This is best used for settings or html fragments stored in the database. It will look for the object in cache, and then if not there query the database and then create the object in cache. These caches too gets cleared on save/destory of their related objects. If the object isn't in the database, it will create it for you with a default value of an empty string. You can pass it what ever value you want for a default with :default_value. Also it defaults to assuming the content isn't html safe. You can make it return as an html_safe buffer by passing it :safe_content? => true.
+
+=== Setting Model
+
+  class Setting < ActiveRecord::Base
+    has_brackets_retrieval :key => :name, :value => :content
+  end
+
+Key is what you must pass to the brackets on the model. Value is the field it will return.
+
+=== View Example
+
+  %meta{:name => "description", :content => Setting['meta_description']}
+
+This amounts to a very small specific cache_sitta call. For now its suggested to not use this feature for user generated content.
 
 == Footer
 

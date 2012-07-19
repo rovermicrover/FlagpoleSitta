@@ -45,6 +45,7 @@ module FlagpoleSitta
         result = @_value_field || (self.superclass.respond_to?(:value_field) ? self.superclass.value_field : nil) || "content"
       end
 
+      #Will look up the object chain till it finds what it was set to, or not set too.
       def default_value
         result = @_default_value || (self.superclass.respond_to?(:default_value) ? self.superclass.default_value : nil) || ""
       end
