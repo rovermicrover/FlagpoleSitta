@@ -1,7 +1,5 @@
 require File.expand_path("../lib/flagpole_sitta/version", __FILE__)
 
-# Provide a simple gemspec so you can easily use your enginex
-# project in your rails apps through git.
 Gem::Specification.new do |s|
   s.name = "flagpole_sitta"
   s.version = FlagpoleSitta::VERSION
@@ -16,8 +14,7 @@ Gem::Specification.new do |s|
   s.executables = `git ls-files`.split("\n").map{|f| f =~ /^bin\/(.*)/ ? $1 : nil}.compact
   s.require_path = 'lib'
 
-  #add dependecy here and in the engine file as a required.
-
+  #Dependencies
   s.add_dependency('dalli')
 
 end

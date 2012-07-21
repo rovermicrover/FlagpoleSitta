@@ -16,5 +16,6 @@ require 'flagpole_sitta/cache_sitta'
 require 'flagpole_sitta/existence_hash'
 require 'flagpole_sitta/engine'
 require 'flagpole_sitta/config_sitta'
+require 'flagpole_sitta/controller_sitta'
 
 ActiveRecord::Base.send(:include, FlagpoleSitta::ConfigSitta)

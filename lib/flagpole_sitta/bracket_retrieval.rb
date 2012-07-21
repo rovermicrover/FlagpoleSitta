@@ -1,9 +1,10 @@
 module FlagpoleSitta
+  ##
+  #Used for getting and caching settings or html fragments stored in the database.
   module BracketRetrieval
 
     extend ActiveSupport::Concern
 
-    #When forcing a call back into a class from a module you must do it inside an include block
     included do
       validates_uniqueness_of (@_key_field || "name").to_sym
       validates_presence_of (@_key_field || "name").to_sym
@@ -19,13 +20,16 @@ module FlagpoleSitta
       self.br_update(false)
     end
 
+    #After update destroy old cache and write new one.
     def br_update alive
-      downcased = self.class.name.downcase
-      #Checks to make sure Controller Caching is on
-      if Rails.application.config.action_controller.perform_caching
-        Rails.cache.delete("#{downcased}/#{self.send(self.class.key_field + "_was")}")
-        Rails.cache.write("#{downcased}/#{self.send(self.class.key_field)}", self.send(self.class.value_field))
+      clazz = self.class
+
+      Rails.cache.delete("#{clazz}/BracketRetrieval/#{self.send(self.class.key_field + "_was")}")
+
+      if alive
+        Rails.cache.write("#{clazz}/BracketRetrieval/#{self.send(self.class.key_field)}", self.send(self.class.value_field))
       end
+      
     end
 
     module ClassMethods
@@ -45,20 +49,16 @@ module FlagpoleSitta
         result = @_value_field || (self.superclass.respond_to?(:value_field) ? self.superclass.value_field : nil) || "content"
       end
 
-      #Will look up the object chain till it finds what it was set to, or not set too.
+      #Will look up the object chain till it finds what it was set to, or not set too. 
+      #Default value cannot be nil.
       def default_value
         result = @_default_value || (self.superclass.respond_to?(:default_value) ? self.superclass.default_value : nil) || ""
       end
 
       def [] key 
-        downcased = self.to_s.downcase
-        #If its in cache return that, unless blank, then return nil
-        #elsif the object is in the database put it into the cache
-        #then return it.
-        #else create the corresponding object as blank, and return nil.
-        #The last line there is why this extension should never be used
-        #with user generated content.
-        if value = Rails.cache.read("#{downcased}/#{key}") || Rails.cache.exist?("#{downcased}/#{key}")
+        clazz = self
+        #If its in cache return that, unless blank, then return nil.
+        if value = Rails.cache.read("#{clazz}/BracketRetrieval/#{key}") || Rails.cache.exist?("#{clazz}/BracketRetrieval/#{key}")
           if value.present?
             value = self.safe_content? ? value.html_safe : value
           else
@@ -67,13 +67,16 @@ module FlagpoleSitta
             #thus the reason for this odd nested if statement.
             value = nil
           end
+        #Else if the object is in the database put it into the cache then return it.
         elsif obj = self.send("find_by_#{self.key_field}", key)
           value = obj.send(self.value_field)
-          Rails.cache.write("#{downcased}/#{key}", value)
+          Rails.cache.write("#{clazz}/BracketRetrieval/#{key}", value)
           value = value && self.safe_content? ? value.html_safe : value
+        #Else create the corresponding object as blank, and return nil.
+        #The last line there is why this extension should never be used with user generated content.
         else
           rec = self.create(self.key_field.to_sym => key, self.value_field.to_sym => self.default_value)
-          Rails.cache.write("#{downcased}/#{key}", rec.send(self.value_field))
+          Rails.cache.write("#{clazz}/BracketRetrieval/#{key}", rec.send(self.value_field))
           value = nil
         end
         value

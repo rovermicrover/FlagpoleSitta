@@ -8,24 +8,25 @@ module FlagpoleSittaHelper
     model.try(:update_array_cache, key, route_id)
   end
 
+  ##
   #AR - cache_sitta helper
   #NOTE This is not safe for .builder xml files.
   #Options
-  #-------
+  #
   #:section
   #The section of the page the cache represents. This is
   #best used in connection with -content_for. Can be any
   #string you want it to be. If not provided will default to
   #body. Also looks for the calls using sections. Will assume calls
   #are in the instance variable '@#{options[:section]_calls'
-  #-------
+  #
   #:model
   #The model of the object, or objects that you want to link
   #the cache too. Pass the actually model, or an array of models.
   #Must also have a corresponding route_id. If model is an array, 
   #route_id must also be an array of equal length. model[i] is 
   #connected to route_id[i].
-  #-------
+  #
   #:route_id
   #The unique identifier of the object, most likely what you route on
   #for showing the object or objects that you want to link
@@ -33,7 +34,7 @@ module FlagpoleSittaHelper
   #Must also have a corresponding model. If route_id is an array, 
   #model must also be an array of equal length. model[i] is 
   #connected to route_id[i].
-  #-------
+  #
   #:models_in_index
   #Use this if the fragment you are rendering is an index
   #pass it all the different types of models/classes could be
@@ -41,19 +42,19 @@ module FlagpoleSittaHelper
   #sitta enabled. The cache for the used index pages will then be
   #wiped clear when anyone of these models/classes has an object
   #created or updated.
-  #-------
+  #
   #:index_only
   #Use this if the cache should not be associated with any object,
   #but rather only a model. Use this if your cache is an index, or
   #can be 'random'.
-  #-------
+  #
   #:sub_route_id
   #Use this if options on the url can result in a difference in
   #the cache. So if you had an page where you could pass
   #in a year and month would be a great place for this.
   #That way your caching each possible version of the page
   #instead of just one.
-  #-------
+  #
   #:calls_args
   #Any args you want to pass to your calls. Can only take one argument.
   #The best idea is to pass an option hash.

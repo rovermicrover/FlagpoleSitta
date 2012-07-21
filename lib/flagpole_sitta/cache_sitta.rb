@@ -1,8 +1,13 @@
 module FlagpoleSitta
+  ##
+  #CacheSitta's main purpose is to make it easier to effectively fragment cache in dynamic fashions in Rails.
+  #
+  #When ever a cache is created it is associated with any model and/or record you tell it to be from the view helper method. When that model and/or record is updated all it’s associated caches are cleared.
+  #
+  #Flagpole also expects you to put all your database calls into Procs/Lamdbas. This makes it so that your database calls wont have to happen unless your cache hasn’t been created. Thus speeding up response time and reducing database traffic.
   module CacheSitta
     extend ActiveSupport::Concern
 
-    #When forcing a call back into a class from a module you must do it inside an include block
     included do
       before_save :cache_sitta_save
       before_destroy :cache_sitta_destory
@@ -10,6 +15,7 @@ module FlagpoleSitta
 
     module ClassMethods
 
+      #Determines if its for an index array or show array.
       def mid_key_gen route_id
         if route_id
           mid_key = "#{route_id}/ShowArray"
@@ -18,6 +24,7 @@ module FlagpoleSitta
         end
       end
 
+      #Creates the 'array' in the cache.
       def initialize_array_cache route_id = nil
 
         
@@ -33,6 +40,7 @@ module FlagpoleSitta
 
       end
 
+      #Updates the 'array' in the cache.
       def update_array_cache key, route_id = nil
 
         mid_key = mid_key_gen route_id
@@ -57,6 +65,7 @@ module FlagpoleSitta
 
       end
 
+      #Loops through the array in the cache.
       def each_cache route_id = nil, &block
 
         mid_key = mid_key_gen route_id
@@ -84,6 +93,7 @@ module FlagpoleSitta
 
       end
 
+      #Nukes all corresponding caches for a given array.
       def destroy_array_cache route_id = nil
 
         mid_key = mid_key_gen route_id
@@ -107,6 +117,7 @@ module FlagpoleSitta
       self.cache_work(false)
     end
 
+    #Updates the cache after update of any cache sittaed item.
     def cache_work(alive)
       original_clazz = self.class
       # Also have to go through all its super objects till the super objects aren't cache sittaed
