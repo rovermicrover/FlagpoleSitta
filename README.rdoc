@@ -50,6 +50,12 @@ OR
 
 Then bundle install.
 
+== Special Thanks
+
+Taha Mukaddam
+https://github.com/tmkdam
+For his feedback and help on this gem.
+
 == cache_sitta
 
 Flagpole Sitta is a gem thats main purpose is to make it easier to effectively fragment cache in dynamic fashions in Rails.
@@ -74,17 +80,13 @@ For a simple application you could do something like this.
 
     def show
 
-      @page_call = lambda {
+      calls_sitta :name => "page", :section => "body" do
         if params[:url]
           @page = Page.find_by_url params[:url]
         else
           @page = Page.find_by_url 'home'
         end
-      }
-
-      @body_calls = [
-        ['page', @page_call]
-      ]
+      end
 
     end
 
@@ -95,17 +97,15 @@ For a simple application you could do something like this.
   - cache_sitta :model => Page, :route_id => params[:url], :section => "body" do
     = @page.content.try(:html_safe)
 
-First off lets look at @body_calls. If you don't provide cache_sitta :calls, then it will look for @#{:section}_calls. So in this case it will look for @body_calls.
+First off lets look at calls_sitta. The view helper method cache_sitta will look for its calls at @#{:section}_calls. The method calls_sitta in the controller will append its provided block or proc (:block => yourproc) to @#{:section}_calls.
 
-Second off @body_calls is an array of arrays. This is because you can have multiple calls, and each call must be given a target instance variable ('page') and a call object (@page_call). So in this instance the cache_sitta helper will do 
-
-    @page = @page_call.call
+Second off @#{:section}_calls is an array of arrays. This is because you can have multiple calls, and each call must be given a target instance variable ie name ('page' in this instance) and a call object (the provide proc or block). They must also be ordered thus the array and not a hash.
 
 You can also pass your calls options by providing :calls_args to the helper. You must though set up your calls to expect an options hash.
 
 :route_id and :model must be provide so that the cache can be associated with the correct object, and the cache clear when its supposed to.
 
-:route_id must also be a unquie field on the model, other wise the cache won't connect properly to the object.
+:route_id must also be a unique field on the model, other wise the cache won't connect properly to the object.
 
 For an index page you could do something like the following for a simple app.
 
@@ -123,13 +123,9 @@ For an index page you could do something like the following for a simple app.
 
     def index
 
-      @blogs_call = lambda {
+      calls_sitta :name => "blogs", :section => "body" do
         @blogs = Blog.all
-      }
-
-      @body_calls = [
-        ['blogs', @blogs_call]
-      ]
+      end
 
     end
 
