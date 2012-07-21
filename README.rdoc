@@ -38,6 +38,12 @@ I looked at it and decided it didn't meet my needs even if I where to get it upd
 
 PS feel free to vote up the above answer on stackoverflow, I know I have!
 
+== Special Thanks
+
+Taha Mukaddam
+https://github.com/tmkdam
+For his feedback and help on this gem.
+
 == Installation
 
 Very simple, in your gemfile
@@ -49,12 +55,6 @@ OR
   gem 'flagpole_sitta', :git => "git://github.com/rovermicrover/FlagpoleSitta.git"
 
 Then bundle install.
-
-== Special Thanks
-
-Taha Mukaddam
-https://github.com/tmkdam
-For his feedback and help on this gem.
 
 == cache_sitta
 
