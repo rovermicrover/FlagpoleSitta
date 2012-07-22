@@ -138,7 +138,7 @@ module FlagpoleSitta
       flag = Rails.cache.read("#{superclazz}/ExistenceHash/Flag")
 
       if flag.nil?
-        flag = initialize_existence_hash
+        flag = self.class.initialize_existence_hash
       end
 
       #If it had a route_id before it most of existed. So get its old values from the existence hash.
