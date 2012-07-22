@@ -27,7 +27,6 @@ module FlagpoleSitta
       #Creates the 'array' in the cache.
       def initialize_array_cache route_id = nil
 
-        
         mid_key = mid_key_gen route_id
 
         clazz = self

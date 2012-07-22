@@ -137,6 +137,10 @@ module FlagpoleSitta
 
       flag = Rails.cache.read("#{superclazz}/ExistenceHash/Flag")
 
+      if flag.nil?
+        flag = initialize_existence_hash
+      end
+
       #If it had a route_id before it most of existed. So get its old values from the existence hash.
       #If there was nothing it didn't exist so create a new one. Also it only creates a new one if alive is set to true.
       #This check is overkill really, but its just to be safe.
