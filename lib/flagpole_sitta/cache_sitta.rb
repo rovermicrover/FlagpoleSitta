@@ -100,7 +100,9 @@ module FlagpoleSitta
         clazz = self
 
         each_cache route_id do |key|
-          Rails.cache.delete(key)
+          if key.present?
+            Rails.cache.delete(key)
+          end
         end
 
         Rails.cache.delete("#{clazz}/#{mid_key}/Flag")
