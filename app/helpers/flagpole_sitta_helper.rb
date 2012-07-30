@@ -54,6 +54,14 @@ module FlagpoleSittaHelper
   #in a year and month would be a great place for this.
   #That way your caching each possible version of the page
   #instead of just one.
+  #
+  #:scope which will add a 'scope' to a :models_in_index cache, 
+  #which will cause the cache to only be destroyed if an object with in its 'scope' is create, 
+  #updated or destroyed. Like :model and :route_id for each model there must be a corresponding route_id. 
+  #If you don't want a scope on every model then just make the index model's scope nil.
+  #The 'scope' can only be arguments for a where call. Which means it will either be a hash or an array.
+  #Scopes should be used sparling because in order to verify them on save they require a call to the database, 
+  #and while it boils down to a call by id, they can still add up if you don't pay attention.
   def cache_sitta  options={}, &block
 
     if options[:route_id].class.eql?(Array)

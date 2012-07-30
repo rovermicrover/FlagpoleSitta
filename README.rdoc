@@ -147,6 +147,14 @@ This also means if your just showing objects in an index you don't even have to 
 
 :index_only => true, tells the helper to not bother trying to associated this cache with anyone item in particular.
 
+You could also pass it :scope which will add a 'scope' to a :models_in_index cache, which will cause the cache to only be destroyed if an object with in its 'scope' is create, updated or destroyed. Like :model and :route_id for each model there must be a corresponding route_id. If you don't want a scope on every model then just do something like the following
+
+  - cache_sitta :models_in_index => [Blog, Setting], :scope => [@scope, nil] :index_only => true, :section => "body" do
+
+The 'scope' can only be arguments for a where call. Which means it will either be a hash or an array.
+
+Scopes should be used sparling because in order to verify them on save they require a call to the database, and while it boils down to a call by id, they can still add up if you don't pay attention.
+
 == existence_hash
 
 If you might have already figured out the overall strategy of this gem has a weakness. Namely how do you deal with instances where, the object being routed to doesn't exist. See if your not querying the database until your already in the view then you can't exactly redirect with out some crazy stuff going on. You could put some if statements in your view to show a 404 if the objects are nil, but the  issue with that is that you would still end up with a bunch of pointless caches. This can all be avoided by creating a 'hash' in the cache which you can use to check for the existence of an object. This 'hash' too is updated on save/destory. Also the hash really isn't hash but rather a bunch of cache keys held together by a flag key. Lets use the page example from above.
