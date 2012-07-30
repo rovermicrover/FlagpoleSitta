@@ -27,8 +27,8 @@ module FlagpoleSitta
         i = 0
         superclazz.find_each do |m|
           #Route ID is the key. The POS is used to emulate an array, along with the length stored in the flag.
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{m.send(m.class.route_id).to_s}", {:type => m.has_attribute?('type') ? m.type : m.class, :pos => i, :num => 0})
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{i}", {:key => m.send(m.class.route_id).to_s})
+          Rails.cache.write("#{superclazz}/ExistenceHash/#{m.class}/#{m.send(m.class.route_id).to_s}", {:type => m.has_attribute?('type') ? m.type : m.class, :pos => i, :num => 0})
+          Rails.cache.write("#{superclazz}/ExistenceHash/#{i}", {:key => m.send(m.class.route_id).to_s, :type => m.class})
           i = i + 1
         end
 
@@ -39,6 +39,8 @@ module FlagpoleSitta
       #Gets a value from the 'hash' in the cache given a key.
       def get_existence_hash key
 
+        clazz = self
+
         superclazz = get_super_with_existence_hash
         #Try to find the hash
         flag = Rails.cache.read("#{superclazz}/ExistenceHash/Flag")
@@ -47,12 +49,14 @@ module FlagpoleSitta
           initialize_existence_hash
         end
 
-        Rails.cache.read("#{superclazz}/ExistenceHash/#{key}")
+        Rails.cache.read("#{superclazz}/ExistenceHash/#{clazz}/#{key}")
 
       end
 
       #Increments a value from the 'hash' in the cache given a key.
       def increment_existence_hash key
+
+        clazz = self
           
         superclazz = get_super_with_existence_hash
         #Try to find the hash
@@ -61,7 +65,7 @@ module FlagpoleSitta
         #Update the hash key if it exists
         if hash
           hash[:num] = hash[:num] + 1
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{key}", hash)
+          Rails.cache.write("#{superclazz}/ExistenceHash/#{clazz}/#{key}", hash)
         end
 
         #Return the value
@@ -71,6 +75,8 @@ module FlagpoleSitta
 
       #Goes through each entry in the hash returning a key and value
       def each_existence_hash &block
+
+        clazz = self
 
         superclazz = get_super_with_existence_hash
 
@@ -85,8 +91,8 @@ module FlagpoleSitta
 
             value = Rails.cache.read("#{superclazz}/ExistenceHash/#{i}")
 
-            if value.present?
-              hash = Rails.cache.read("#{superclazz}/ExistenceHash/#{value[:key]}")
+            if value.present? && value[:type].eql?(clazz)
+              hash = Rails.cache.read("#{superclazz}/ExistenceHash/#{value[:type]}/#{value[:key]}")
               yield value[:key], hash
             end
 
@@ -129,6 +135,7 @@ module FlagpoleSitta
 
     #Updates the 'hash' on save of any of its records.
     def update_existence_hash alive
+      clazz = self.class
       superclazz = self.class.get_super_with_existence_hash
 
       #Old key is where it was, and new is where it is going.
@@ -151,13 +158,13 @@ module FlagpoleSitta
         hash = {:type => self.has_attribute?('type') ? self.type : self.class, :num => 0, :pos => flag[:space]}
       else
         hash = self.class.get_existence_hash(self.send("#{self.class.route_id}_was"))
-        Rails.cache.delete("#{superclazz}/ExistenceHash/#{old_key}")
+        Rails.cache.delete("#{superclazz}/ExistenceHash/#{clazz}/#{old_key}")
       end
 
       #If the record is not being destroyed add new route_id to existence hash
       if alive
-        Rails.cache.write("#{superclazz}/ExistenceHash/#{new_key}", hash)
-        Rails.cache.write("#{superclazz}/ExistenceHash/#{hash[:pos]}", {:key => new_key})
+        Rails.cache.write("#{superclazz}/ExistenceHash/#{clazz}/#{new_key}", hash)
+        Rails.cache.write("#{superclazz}/ExistenceHash/#{hash[:pos]}", {:key => new_key, :type => clazz})
       #The following check is needed if for some reason someone does destroy on a none saved record.
       elsif !self.new_record?
         if hash[:pos] == flag[:space]

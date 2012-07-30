@@ -1,11 +1,11 @@
 module FlagpoleSittaHelper
 
-  def update_index_array_cache model, key
-    model.try(:update_array_cache, key)
+  def update_index_array_cache model, key, scope=nil
+    model.try(:update_array_cache, key, :scope => scope)
   end
 
   def update_show_array_cache model, key, route_id
-    model.try(:update_array_cache, key, route_id)
+    model.try(:update_array_cache, key, :route_id => route_id)
   end
 
   ##
@@ -54,10 +54,6 @@ module FlagpoleSittaHelper
   #in a year and month would be a great place for this.
   #That way your caching each possible version of the page
   #instead of just one.
-  #
-  #:calls_args
-  #Any args you want to pass to your calls. Can only take one argument.
-  #The best idea is to pass an option hash.
   def cache_sitta  options={}, &block
 
     if options[:route_id].class.eql?(Array)
@@ -120,11 +116,7 @@ module FlagpoleSittaHelper
         if calls
           calls.each do |c|
             if instance_variable_get("@#{c[0]}").nil?
-              if options[:calls_args] && (c.parameters.length > 0)
-                instance_variable_set("@#{c[0]}", c[1].call(options[:calls_args]))
-              else
-                instance_variable_set("@#{c[0]}", c[1].call())
-              end
+              instance_variable_set("@#{c[0]}", c[1].call())
             end
           end
         end
@@ -142,13 +134,17 @@ module FlagpoleSittaHelper
       #any of the model types involved are updated.
 
       if options[:models_in_index].class.eql?(Array)
-        options[:models_in_index].each do |m|
-          processed_m = m.respond_to?(:constantize) ? m.constantize : m
-          update_index_array_cache(processed_m, key)
+        options[:models_in_index].each_index do |i|
+          m = options[:models_in_index][i]
+          if options[:scope]
+            scope = options[:scope][i]
+          end
+          processed_model = m.respond_to?(:constantize) ? m.constantize : m
+          update_index_array_cache(processed_model, key, scope)
         end
       elsif options[:models_in_index]
         processed_model = options[:models_in_index].respond_to?(:constantize) ? options[:models_in_index].constantize : options[:models_in_index]
-        update_index_array_cache(options[:models_in_index], key)
+        update_index_array_cache(processed_model, key, options[:scope])
       end
 
       #AR - Create a link between each declared object and the cache.
