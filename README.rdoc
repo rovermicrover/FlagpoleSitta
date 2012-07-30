@@ -174,27 +174,21 @@ A quick note you only actually have to pass :route_id once if your using both ca
 
   class PagesController < ApplicationController
 
-    if Page.get_existence_hash(params[:url])
+    def show
 
-      def show
-
-        @page_call = lambda {
+      if Page.get_existence_hash(params[:url])
+        calls_sitta :name => "page", :section => "body" do
           if params[:url]
             @page = Page.find_by_url params[:url]
           else
             @page = Page.find_by_url 'home'
           end
-        }
-
-        @body_calls = [
-          ['page', @page_call]
-        ]
-
+        end
+      else
+        redirect_to :action => 'home'
+        flash[:notice] = "The Page you are looking for doesn't exist"
       end
 
-    else
-      redirect_to :action => 'home'
-      flash[:notice] = "The Page you are looking for doesn't exist"
     end
 
   end
