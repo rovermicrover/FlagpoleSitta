@@ -151,7 +151,7 @@ You could also pass it :scope which will add a 'scope' to a :models_in_index cac
 
   - cache_sitta :models_in_index => [Blog, Setting], :scope => [@scope, nil] :index_only => true, :section => "body" do
 
-The 'scope' can only be arguments for a where call. Which means it will either be a hash or an array.
+The 'scope' can only be arguments for a where call. Which means it will either be a hash, record object, string, or an array.
 
 Scopes should be used sparling because in order to verify them on save they require a call to the database, and while it boils down to a call by id, they can still add up if you don't pay attention.
 
