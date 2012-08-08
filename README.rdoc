@@ -12,7 +12,7 @@ The rottenness and evil in me.
 
 == Preface
 
-===This gem should be considered in early beta and highly unstable. Do not use in a production app!
+===This gem should be considered in beta.
 
 This gem was inspired in part by the song Flagpole Sitta by Harvey Danger. So if you like the gem and are wanting to help out please either donate your time and submit some patches, or donate to the band who wrote the song. They put there last two albums out there all open source like, only asking that those that could donate after downloading. While your donating, if you choose to do so, don't be afraid to download their albums, its good stuff!
 
@@ -221,7 +221,7 @@ Also if for what ever reason you have made your app multi threaded this gem will
 
 http://stackoverflow.com/a/1390978/1436131
 
-===This gem should be considered in early beta and highly unstable. Do not use in a production app!
+===This gem should be considered in beta.
 
 MIT License 
 

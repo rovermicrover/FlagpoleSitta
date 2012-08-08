@@ -108,18 +108,14 @@ module FlagpoleSittaHelper
       "@" + (options[:section] ? options[:section] : 'body') + "_calls"
     )
 
-    if content = Rails.cache.read(key)
-      #Do nothing the content is ready to render
+    if hash = Rails.cache.read(key)
+      content = hash[:content]
     else
       #NOTE This is not safe for .builder xml files, and using capture here is why.
       #Its either this or a really complicated hack, from the rails source code, which
       #at the moment I don't feel comfortable using. Waiting for an official solution for
       #the ability to use capture with .builders.
       content = capture do
-        #AR - If call_path is an array render each one, other
-        #wise just render call_path, because it must
-        #be a string or array by this point or something went
-        #terribly terribly wrong.
 
         if calls
           calls.each do |c|
@@ -141,6 +137,8 @@ module FlagpoleSittaHelper
       #that while its not an index, there isn't a clear way expect to nuke it when
       #any of the model types involved are updated.
 
+      associated = Array.new
+
       if options[:models_in_index].class.eql?(Array)
         options[:models_in_index].each_index do |i|
           m = options[:models_in_index][i]
@@ -148,11 +146,11 @@ module FlagpoleSittaHelper
             scope = options[:scope][i]
           end
           processed_model = m.respond_to?(:constantize) ? m.constantize : m
-          update_index_array_cache(processed_model, key, scope)
+          associated << update_index_array_cache(processed_model, key, scope)
         end
       elsif options[:models_in_index]
         processed_model = options[:models_in_index].respond_to?(:constantize) ? options[:models_in_index].constantize : options[:models_in_index]
-        update_index_array_cache(processed_model, key, options[:scope])
+        associated << update_index_array_cache(processed_model, key, options[:scope])
       end
 
       #AR - Create a link between each declared object and the cache.
@@ -160,14 +158,14 @@ module FlagpoleSittaHelper
       if !options[:index_only] && options[:route_id]
         if options[:route_id].class.eql?(Array) && options[:model].class.eql?(Array)
           options[:model].each_index do |i|
-            update_show_array_cache(options[:model][i], key, options[:route_id][i])
+            associated << update_show_array_cache(options[:model][i], key, options[:route_id][i])
           end
         else
-          update_show_array_cache(main_model, key, main_route_id)
+          associated << update_show_array_cache(main_model, key, main_route_id)
         end
       end
 
-      Rails.cache.write(key, content)
+      Rails.cache.write(key, {:content => content, :associated => associated})
 
     end
 

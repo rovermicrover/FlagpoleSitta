@@ -32,7 +32,7 @@ module FlagpoleSitta
 
         clazz = self
 
-        flag = {:space => - 1}
+        flag = {:space => -1, :empty => -1}
 
         Rails.cache.write("#{clazz}/#{mid_key}/Flag", flag)
 
@@ -54,14 +54,26 @@ module FlagpoleSitta
           flag = initialize_array_cache options[:route_id]
         end
 
-        #AR - update the array's end point
-        flag[:space] = flag[:space] + 1
+        if flag[:empty] > -1
+          #Find any empty container to use by popping it off of the top of the "stack".
+          i = Rails.cache.read("#{clazz}/#{mid_key}/EmptyStack/#{flag[:empty]}")
+          #Sense its going to be used remove its reference from the Stack.
+          Rails.cache.delete("#{clazz}/#{mid_key}/EmptyStack/#{flag[:empty]}")
+          #Update the empty on flag to now hit the newest none used container on the stack.
+          flag[:empty] = flag[:empty] - 1
+        else
+          #AR - update the array's end point
+          flag[:space] = flag[:space] + 1
+          i = flag[:space]
+        end
        
         #AR - write out the new index at the end of the array
-        Rails.cache.write("#{clazz}/#{mid_key}/#{flag[:space]}", {:key => key, :scope => options[:scope]})
+        Rails.cache.write("#{clazz}/#{mid_key}/#{i}", {:key => key, :scope => options[:scope]})
 
         #AR - update flag in the cache
         Rails.cache.write("#{clazz}/#{mid_key}/Flag", flag)
+
+        "#{clazz}/#{mid_key}/#{i}"
 
       end
 
@@ -100,9 +112,37 @@ module FlagpoleSitta
         i = 0
 
         each_cache options[:route_id] do |hash|
+          #A Check in Case there is some type of cache failure
           if hash.present?
+            #If it has no scope, or it falls in scope
             if hash[:scope].nil? || options[:obj].in_scope(hash[:scope])
+              #Get all the associated.
+              associated = Rails.cache.read(hash[:key])[:associated]
+              #Destroy the actually cache
               Rails.cache.delete(hash[:key])
+              associated.each do |a|
+                #Get the base key
+                base_key = a.gsub(/\/[^\/]*\z/, "")
+                #Get the flag. Capture the god damn flag!
+                flag_key = base_key + "/Flag"
+                #Get its location in the 'Array'
+                n = a.split("/").last
+                # Check in case of cache failure
+                if flag = Rails.cache.read(flag_key)
+                  #Add an empty spot to the 'Array'
+                  flag[:empty] = flag[:empty] + 1
+                  empty_stack_key = base_key + "/EmptyStack/" + flag[:empty].to_s
+                  #Save the empty spot location to the 'Stack'
+                  Rails.cache.write(empty_stack_key, n)
+                  #Update the flag
+                  Rails.cache.write(flag_key, flag)
+                end
+
+                #Finally get rid of the associated cache object.
+                Rails.cache.delete(a)
+
+              end
+            #Else It is not in scope so the cache lives to fight another day!
             else
               Rails.cache.write("#{clazz}/#{mid_key}/#{i}", hash)
               i = i + 1
@@ -110,11 +150,16 @@ module FlagpoleSitta
           end
         end
 
+        #If everything was deleted destroy the flag.
         if i == 0
           Rails.cache.delete("#{clazz}/#{mid_key}/Flag")
+        #Else update the flag
         else
           flag = Rails.cache.read("#{clazz}/#{mid_key}/Flag")
-          flag[:space => (i - 1)]
+          flag[:space] = (i - 1)
+          #Sense we moved through every object and moved all the remaining objects down
+          #there should be no empty spaces.
+          flag[:empty] = -1
           Rails.cache.write("#{clazz}/#{mid_key}/Flag", flag)
         end
       end
