@@ -15,6 +15,7 @@ Gem::Specification.new do |s|
   s.require_path = 'lib'
 
   #Dependencies
+  #This is just for now until I can test it with out adapters.
   s.add_dependency('dalli')
 
 end
