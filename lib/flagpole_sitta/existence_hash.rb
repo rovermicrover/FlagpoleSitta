@@ -27,8 +27,8 @@ module FlagpoleSitta
         i = 0
         superclazz.find_each do |m|
           #Route ID is the key. The POS is used to emulate an array, along with the length stored in the flag.
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{m.class}/#{m.send(m.class.route_id).to_s}", {:type => m.has_attribute?('type') ? m.type : m.class, :pos => i, :num => m.has_attribute?('num') ? m.num : 0})
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{i}", {:key => m.send(m.class.route_id).to_s, :type => m.class})
+          Rails.cache.write("#{superclazz}/ExistenceHash/#{m.class}/#{m.send(m.class.route_id).to_s}", {:type => m.class.to_s, :pos => i, :num => m.has_attribute?('num') ? (m.num || 0) : 0})
+          Rails.cache.write("#{superclazz}/ExistenceHash/#{i}", {:key => m.send(m.class.route_id).to_s, :type => m.class.to_s})
           i = i + 1
         end
 
@@ -91,9 +91,12 @@ module FlagpoleSitta
 
             value = Rails.cache.read("#{superclazz}/ExistenceHash/#{i}")
 
-            if value.present? && value[:type].eql?(clazz)
+            if value.present? && value[:type].to_s.eql?(clazz.to_s)
               hash = Rails.cache.read("#{superclazz}/ExistenceHash/#{value[:type]}/#{value[:key]}")
-              yield value[:key], hash
+              #This if statement is to make it fail gracefully if the cache has degraded.
+              if hash.present?
+                yield value[:key], hash
+              end
             end
 
           end
@@ -138,13 +141,13 @@ module FlagpoleSitta
       #Get the Current Class and the Old Class in case the object changed classes.
       #If its the base object, ie type is nil, then return class as the old_clazz.
       #If the object doesn't have the type field assume it can't change classes.
-      new_clazz = self.has_attribute?('type') ? (self.type || self.class) : self.class
-      old_clazz = self.has_attribute?('type') ? (self.type_was || self.class) : self.class
+      new_clazz = self.has_attribute?('type') ? (self.type || self.class.to_s) : self.class.to_s
+      old_clazz = self.has_attribute?('type') ? (self.type_was || self.class.to_s) : self.class.to_s
       superclazz = self.class.get_super_with_existence_hash
 
       #Old key is where it was, and new is where it is going.
-      old_key = self.send("#{self.class.route_id}_was")
-      new_key = self.send("#{self.class.route_id}")
+      new_key = new_clazz.respond_to?(:constantize) ? self.send("#{new_clazz.constantize.route_id}") : nil
+      old_key = old_clazz.respond_to?(:constantize) ? self.send("#{old_clazz.constantize.route_id}_was") : nil
 
       flag = Rails.cache.read("#{superclazz}/ExistenceHash/Flag")
 
@@ -169,20 +172,23 @@ module FlagpoleSitta
           flag[:space] = flag[:space] + 1
           i = flag[:space]
         end
-        hash = {:type => self.has_attribute?('type') ? self.type : self.class, :num => self.has_attribute?('num') ? self.num : 0, :pos => i}
+        hash = {:type => new_clazz, :num => self.has_attribute?('num') ? (self.num || 0) : 0, :pos => i}
       #If its an already existing record them get its existence hash, and then remove it from the cache.
       else
-        hash = self.class.get_existence_hash(self.send("#{self.class.route_id}_was"))
+        hash = Rails.cache.read("#{superclazz}/ExistenceHash/#{old_clazz}/#{old_key}")
         hash[:type] = new_clazz
-        Rails.cache.delete("#{superclazz}/ExistenceHash/#{old_clazz}/#{old_key}")
       end
+
+      #Before new info gets written make sure to delete all the old records just in case. The New location before it gets used too.
+      Rails.cache.delete("#{superclazz}/ExistenceHash/#{new_clazz}/#{new_key}")
+      Rails.cache.delete("#{superclazz}/ExistenceHash/#{old_clazz}/#{old_key}")
+      Rails.cache.delete("#{superclazz}/ExistenceHash/#{hash[:pos]}")
 
       #If the record is not being destroyed add new route_id to existence hash
       if alive
         Rails.cache.write("#{superclazz}/ExistenceHash/#{new_clazz}/#{new_key}", hash)
-        Rails.cache.write("#{superclazz}/ExistenceHash/#{hash[:pos]}", {:key => new_key, :type => new_clazz})
-      #The following check is needed if for some reason someone does destroy on a none saved record.
-      elsif !self.new_record?
+        Rails.cache.write("#{superclazz}/ExistenceHash/#{hash[:pos]}", {:type => new_clazz, :key => new_key})
+      else
         if hash[:pos] == flag[:space]
           flag[:space] = flag[:space] - 1
         else
@@ -190,7 +196,6 @@ module FlagpoleSitta
           Rails.cache.write("#{superclazz}/ExistenceHash/EmptyStack/#{flag[:empty]}", hash[:pos])
         end
         flag[:count] = flag[:count] - 1
-        Rails.cache.delete("#{superclazz}/ExistenceHash/#{hash[:pos]}")
       end
 
       Rails.cache.write("#{superclazz}/ExistenceHash/Flag", flag)
