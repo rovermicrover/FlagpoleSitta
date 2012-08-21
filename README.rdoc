@@ -14,6 +14,9 @@ The rottenness and evil in me.
 
 ===This gem should be considered in beta.
 
+===Before You Use read This.
+https://github.com/rovermicrover/FlagpoleSitta/wiki/Before-You-Use-Read-This.
+
 This gem was inspired in part by the song Flagpole Sitta by Harvey Danger. So if you like the gem and are wanting to help out please either donate your time and submit some patches, or donate to the band who wrote the song. They put there last two albums out there all open source like, only asking that those that could donate after downloading. While your donating, if you choose to do so, don't be afraid to download their albums, its good stuff!
 
 http://www.harveydanger.com/contribute.php
