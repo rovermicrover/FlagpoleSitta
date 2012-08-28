@@ -16,6 +16,10 @@ module FlagpoleSitta
 
     module ClassMethods
 
+      def clazz
+        self
+      end
+
       #Determines if its for an index array or show array.
       def mid_key_gen route_id
         if route_id
@@ -25,29 +29,42 @@ module FlagpoleSitta
         end
       end
 
-      #Creates the 'array' in the cache.
-      def initialize_array_cache route_id = nil
+      #Options :emptystack will make it generate a key for the emptystack instead of the general cache array.
+      def array_cache_key_gen key, route_id, options={}
 
         mid_key = mid_key_gen route_id
 
-        clazz = self
+        model = options[:model] || clazz
+
+
+        if options[:emptystack]
+          "#{model}/#{mid_key}/EmptyStack/#{key}"
+        else
+          "#{model}/#{mid_key}/#{key}"
+        end
+
+      end
+
+      #Creates the 'array' in the cache.
+      def initialize_array_cache route_id = nil
+
+        flag_key = array_cache_key_gen "Flag", route_id
 
         flag = {:space => -1, :empty => -1}
 
-        Rails.cache.write("#{clazz}/#{mid_key}/Flag", flag)
+        FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
 
         flag
 
       end
 
       #Updates the 'array' in the cache.
+      #Options :route_id which determines the type of mid_key
       def update_array_cache key, options={}
 
-        mid_key = mid_key_gen options[:route_id]
+        flag_key = array_cache_key_gen "Flag", options[:route_id]
 
-        clazz = self
-
-        flag = Rails.cache.read("#{clazz}/#{mid_key}/Flag")
+        flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
 
         #AR - If it doesn't exist start the process of creating it
         if flag.nil?
@@ -56,9 +73,11 @@ module FlagpoleSitta
 
         if flag[:empty] > -1
           #Find any empty container to use by popping it off of the top of the "stack".
-          i = Rails.cache.read("#{clazz}/#{mid_key}/EmptyStack/#{flag[:empty]}")
+          empty_key = array_cache_key_gen flag[:empty], options[:route_id], :emptystack => true
+
+          i = FlagpoleSitta::CommonFs.flagpole_cache_read(empty_key)
           #Sense its going to be used remove its reference from the Stack.
-          Rails.cache.delete("#{clazz}/#{mid_key}/EmptyStack/#{flag[:empty]}")
+          FlagpoleSitta::CommonFs.flagpole_cache_delete(empty_key)
           #Update the empty on flag to now hit the newest none used container on the stack.
           flag[:empty] = flag[:empty] - 1
         else
@@ -68,30 +87,31 @@ module FlagpoleSitta
         end
        
         #AR - write out the new index at the end of the array
-        Rails.cache.write("#{clazz}/#{mid_key}/#{i}", {:key => key, :scope => options[:scope]})
+        array_key = array_cache_key_gen i, options[:route_id]
+        FlagpoleSitta::CommonFs.flagpole_cache_write(array_key, {:key => key, :scope => options[:scope]})
 
         #AR - update flag in the cache
-        Rails.cache.write("#{clazz}/#{mid_key}/Flag", flag)
+        flag_key = array_cache_key_gen "Flag", options[:route_id]
+        FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
 
-        "#{clazz}/#{mid_key}/#{i}"
+        key
 
       end
 
       #Loops through the array in the cache.
       def each_cache route_id = nil, &block
 
-        mid_key = mid_key_gen route_id
+        flag_key = array_cache_key_gen "Flag", route_id
 
-        clazz = self
-
-        flag = Rails.cache.read("#{clazz}/#{mid_key}/Flag")
+        flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
 
         #AR - If there aren't any index do nothing.
         #Else wise loop through every index.
         #If it actually does exist then yield.
         if flag
           for i in 0..flag[:space] do
-            hash = Rails.cache.read("#{clazz}/#{mid_key}/#{i}")
+            array_key = array_cache_key_gen i, route_id
+            hash = FlagpoleSitta::CommonFs.flagpole_cache_read(array_key)
             if hash
               yield hash
             end
@@ -105,10 +125,6 @@ module FlagpoleSitta
       #Nukes all corresponding caches for a given array.
       def destroy_array_cache options={}
 
-        mid_key = mid_key_gen options[:route_id]
-
-        clazz = self
-
         i = 0
 
         each_cache options[:route_id] do |hash|
@@ -117,9 +133,10 @@ module FlagpoleSitta
             #If it has no scope, or it falls in scope
             if hash[:scope].nil? || options[:obj].in_scope(hash[:scope])
               #Get all the associated.
-              associated = Rails.cache.read(hash[:key])[:associated]
+              associated = FlagpoleSitta::CommonFs.flagpole_cache_read(hash[:key])[:associated]
+              puts hash[:key]
               #Destroy the actually cache
-              Rails.cache.delete(hash[:key])
+              FlagpoleSitta::CommonFs.flagpole_cache_delete(hash[:key])
               associated.each do |a|
                 #Get the base key
                 base_key = a.gsub(/\/[^\/]*\z/, "")
@@ -128,39 +145,42 @@ module FlagpoleSitta
                 #Get its location in the 'Array'
                 n = a.split("/").last
                 # Check in case of cache failure
-                if flag = Rails.cache.read(flag_key)
+                if flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
                   #Add an empty spot to the 'Array'
                   flag[:empty] = flag[:empty] + 1
                   empty_stack_key = base_key + "/EmptyStack/" + flag[:empty].to_s
                   #Save the empty spot location to the 'Stack'
-                  Rails.cache.write(empty_stack_key, n)
+                  FlagpoleSitta::CommonFs.flagpole_cache_write(empty_stack_key, n)
                   #Update the flag
-                  Rails.cache.write(flag_key, flag)
+                  FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
                 end
 
                 #Finally get rid of the associated cache object.
-                Rails.cache.delete(a)
+                FlagpoleSitta::CommonFs.flagpole_cache_delete(a)
 
               end
             #Else It is not in scope so the cache lives to fight another day!
             else
-              Rails.cache.write("#{clazz}/#{mid_key}/#{i}", hash)
+              key = array_cache_key_gen i, options[:route_id]
+              FlagpoleSitta::CommonFs.flagpole_cache_write(key, hash)
               i = i + 1
             end
           end
         end
 
+
+        flag_key = array_cache_key_gen "Flag", options[:route_id]
         #If everything was deleted destroy the flag.
         if i == 0
-          Rails.cache.delete("#{clazz}/#{mid_key}/Flag")
+          FlagpoleSitta::CommonFs.flagpole_cache_delete(flag_key)
         #Else update the flag
         else
-          flag = Rails.cache.read("#{clazz}/#{mid_key}/Flag")
+          flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
           flag[:space] = (i - 1)
           #Sense we moved through every object and moved all the remaining objects down
           #there should be no empty spaces.
           flag[:empty] = -1
-          Rails.cache.write("#{clazz}/#{mid_key}/Flag", flag)
+          FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
         end
       end
 
@@ -184,21 +204,21 @@ module FlagpoleSitta
       # Also have to go through all its super objects till the super objects aren't cache sittaed
       # this is because the new updated object for a sub class, could have also been in a cache for
       # said sub class, but also in a cache for its super.
-      clazz = original_clazz
-      while(clazz.respond_to? :destroy_array_cache)
+      cur_clazz = original_clazz
+      while(cur_clazz.respond_to? :destroy_array_cache)
 
         #AR - Clear all caches related to the old route_id
-        clazz.destroy_array_cache(:route_id => self.try(:send, ("#{clazz.route_id}_was")).to_s)
+        cur_clazz.destroy_array_cache(:route_id => self.try(:send, ("#{cur_clazz.route_id}_was")).to_s)
         #AR - Clear all caches related to the new route_id just in case
-        clazz.destroy_array_cache(:route_id => self.try(:send, ("#{clazz.route_id}")).to_s)
+        cur_clazz.destroy_array_cache(:route_id => self.try(:send, ("#{cur_clazz.route_id}")).to_s)
         #AR - If the new and old are the same All that will happen on the second call is that
         #it will write the flag out and then destroy it. A very tiny bit of work
         #for a great amount of extra protection.
 
         # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
-        clazz.destroy_array_cache(:obj => self)
+        cur_clazz.destroy_array_cache(:obj => self)
 
-        clazz = clazz.superclass
+        cur_clazz = cur_clazz.superclass
       end
 
       #AR - For Safety this will not recurse upwards for the extra cache maintenance
@@ -211,13 +231,13 @@ module FlagpoleSitta
     #for the update object.
     def post_cache_work
       original_clazz = self.class
-      clazz = original_clazz
+      cur_clazz = original_clazz
 
-      while(clazz.respond_to? :destroy_array_cache)
+      while(cur_clazz.respond_to? :destroy_array_cache)
         # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
-        clazz.destroy_array_cache(:obj => self)
+        cur_clazz.destroy_array_cache(:obj => self)
 
-        clazz = clazz.superclass
+        cur_clazz = cur_clazz.superclass
       end
 
     end

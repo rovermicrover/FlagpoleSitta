@@ -108,64 +108,73 @@ module FlagpoleSittaHelper
       "@" + (options[:section] ? options[:section] : 'body') + "_calls"
     )
 
-    if hash = Rails.cache.read(key)
+    hash = benchmark("Read fragment #{key} :: FlagpoleSitta") do
+      hash = FlagpoleSitta::CommonFs.flagpole_cache_read(key)
+    end
+
+    if hash
       content = hash[:content]
     else
-      #NOTE This is not safe for .builder xml files, and using capture here is why.
-      #Its either this or a really complicated hack, from the rails source code, which
-      #at the moment I don't feel comfortable using. Waiting for an official solution for
-      #the ability to use capture with .builders.
-      content = capture do
+      content = benchmark("Write fragment #{key} :: FlagpoleSitta") do
+        #NOTE This is not safe for .builder xml files, and using capture here is why.
+        #Its either this or a really complicated hack, from the rails source code, which
+        #at the moment I don't feel comfortable using. Waiting for an official solution for
+        #the ability to use capture with .builders.
+        content = capture do
 
-        if calls
-          calls.each do |c|
-            if instance_variable_get("@#{c[0]}").nil?
-              instance_variable_set("@#{c[0]}", c[1].call())
+          if calls
+            calls.each do |c|
+              if instance_variable_get("@#{c[0]}").nil?
+                instance_variable_set("@#{c[0]}", c[1].call())
+              end
             end
           end
+
+          yield
+
         end
 
-        yield
+        #AR - If the cache is an index or includes an index
+        #then models_in_index should be passed with all the
+        #models that could show up in the index.
+        #Then on save of any model include here this index will be cleared.
+        #This can also be used for fragments where there are just so many objects,
+        #that while its not an index, there isn't a clear way expect to nuke it when
+        #any of the model types involved are updated.
 
-      end
+        associated = Array.new
 
-      #AR - If the cache is an index or includes an index
-      #then models_in_index should be passed with all the
-      #models that could show up in the index.
-      #Then on save of any model include here this index will be cleared.
-      #This can also be used for fragments where there are just so many objects,
-      #that while its not an index, there isn't a clear way expect to nuke it when
-      #any of the model types involved are updated.
-
-      associated = Array.new
-
-      if options[:models_in_index].class.eql?(Array)
-        options[:models_in_index].each_index do |i|
-          m = options[:models_in_index][i]
-          if options[:scope]
-            scope = options[:scope][i]
+        if options[:models_in_index].class.eql?(Array)
+          options[:models_in_index].each_index do |i|
+            m = options[:models_in_index][i]
+            if options[:scope]
+              scope = options[:scope][i]
+            end
+            processed_model = m.respond_to?(:constantize) ? m.constantize : m
+            associated << update_index_array_cache(processed_model, key, scope)
           end
-          processed_model = m.respond_to?(:constantize) ? m.constantize : m
-          associated << update_index_array_cache(processed_model, key, scope)
+        elsif options[:models_in_index]
+          processed_model = options[:models_in_index].respond_to?(:constantize) ? options[:models_in_index].constantize : options[:models_in_index]
+          associated << update_index_array_cache(processed_model, key, options[:scope])
         end
-      elsif options[:models_in_index]
-        processed_model = options[:models_in_index].respond_to?(:constantize) ? options[:models_in_index].constantize : options[:models_in_index]
-        associated << update_index_array_cache(processed_model, key, options[:scope])
-      end
 
-      #AR - Create a link between each declared object and the cache.
+        #AR - Create a link between each declared object and the cache.
 
-      if !options[:index_only] && options[:route_id]
-        if options[:route_id].class.eql?(Array) && options[:model].class.eql?(Array)
-          options[:model].each_index do |i|
-            associated << update_show_array_cache(options[:model][i], key, options[:route_id][i])
+        if !options[:index_only] && options[:route_id]
+          if options[:route_id].class.eql?(Array) && options[:model].class.eql?(Array)
+            options[:model].each_index do |i|
+              associated << update_show_array_cache(options[:model][i], key, options[:route_id][i])
+            end
+          else
+            associated << update_show_array_cache(main_model, key, main_route_id)
           end
-        else
-          associated << update_show_array_cache(main_model, key, main_route_id)
         end
-      end
 
-      Rails.cache.write(key, {:content => content, :associated => associated})
+        FlagpoleSitta::CommonFs.flagpole_cache_write(key, {:content => content, :associated => associated})
+
+        content
+
+      end
 
     end
 

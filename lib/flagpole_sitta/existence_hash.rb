@@ -12,6 +12,31 @@ module FlagpoleSitta
 
     module ClassMethods
 
+       #Options :emptystack will make it generate a key for the emptystack instead of the general cache array.
+      def eh_key_gen key, options={}
+
+        superclazz = get_super_with_existence_hash
+
+        end_key = end_key_gen key, options[:class]
+
+
+        if options[:emptystack]
+          "#{superclazz}/ExistenceHash/EmptyStack/#{end_key}"
+        else
+          "#{superclazz}/ExistenceHash/#{end_key}"
+        end
+
+      end
+
+      def end_key_gen key, clazz
+        if clazz
+          "#{clazz}/#{key}"
+        else
+          "#{key}"
+        end
+      end
+
+
       #Creates the 'hash' in the cache.
       def initialize_existence_hash
 
@@ -23,12 +48,15 @@ module FlagpoleSitta
 
         flag = {:space => (count - 1), :count => count, :empty => -1}
 
-        Rails.cache.write("#{superclazz}/ExistenceHash/Flag", flag)
+        flag_key = eh_key_gen "Flag"
+        FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
         i = 0
         superclazz.find_each do |m|
           #Route ID is the key. The POS is used to emulate an array, along with the length stored in the flag.
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{m.class}/#{m.send(m.class.route_id).to_s}", {:type => m.class.to_s, :pos => i, :num => m.has_attribute?('num') ? (m.num || 0) : 0})
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{i}", {:key => m.send(m.class.route_id).to_s, :type => m.class.to_s})
+          main_key = eh_key_gen m.send(m.class.route_id), :class => m.class
+          FlagpoleSitta::CommonFs.flagpole_cache_write(main_key, {:type => m.class.to_s, :pos => i, :num => m.has_attribute?('num') ? (m.num || 0) : 0})
+          array_key = eh_key_gen i
+          FlagpoleSitta::CommonFs.flagpole_cache_write(array_key, {:key => m.send(m.class.route_id).to_s, :type => m.class.to_s})
           i = i + 1
         end
 
@@ -43,13 +71,15 @@ module FlagpoleSitta
 
         superclazz = get_super_with_existence_hash
         #Try to find the hash
-        flag = Rails.cache.read("#{superclazz}/ExistenceHash/Flag")
+        flag_key = eh_key_gen "Flag"
+        flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
         #If it doesn't exist start the process of creating it
         if flag.nil?
           initialize_existence_hash
         end
 
-        Rails.cache.read("#{superclazz}/ExistenceHash/#{clazz}/#{key}")
+        main_key = eh_key_gen key, :class => clazz
+        FlagpoleSitta::CommonFs.flagpole_cache_read(main_key)
 
       end
 
@@ -65,7 +95,8 @@ module FlagpoleSitta
         #Update the hash key if it exists
         if hash
           hash[:num] = hash[:num] + 1
-          Rails.cache.write("#{superclazz}/ExistenceHash/#{clazz}/#{key}", hash)
+          main_key = eh_key_gen key, :class => clazz
+          FlagpoleSitta::CommonFs.flagpole_cache_write(main_key, hash)
         end
 
         #Return the value
@@ -80,7 +111,8 @@ module FlagpoleSitta
 
         superclazz = get_super_with_existence_hash
 
-        flag = Rails.cache.read("#{superclazz}/ExistenceHash/Flag")
+        flag_key = eh_key_gen "Flag"
+        flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
 
         if flag.nil?
           flag = initialize_existence_hash
@@ -89,10 +121,12 @@ module FlagpoleSitta
         unless flag[:count] == 0
           for i in 0..flag[:space] do
 
-            value = Rails.cache.read("#{superclazz}/ExistenceHash/#{i}")
+            cur_array_key = eh_key_gen i
+            value = FlagpoleSitta::CommonFs.flagpole_cache_read(cur_array_key)
 
             if value.present? && value[:type].to_s.eql?(clazz.to_s)
-              hash = Rails.cache.read("#{superclazz}/ExistenceHash/#{value[:type]}/#{value[:key]}")
+              cur_main_key = eh_key_gen value[:key], :class => value[:type]
+              hash = FlagpoleSitta::CommonFs.flagpole_cache_read(cur_main_key)
               #This if statement is to make it fail gracefully if the cache has degraded.
               if hash.present?
                 yield value[:key], hash
@@ -149,7 +183,11 @@ module FlagpoleSitta
       new_key = new_clazz.respond_to?(:constantize) ? self.send("#{new_clazz.constantize.route_id}") : nil
       old_key = old_clazz.respond_to?(:constantize) ? self.send("#{old_clazz.constantize.route_id}_was") : nil
 
-      flag = Rails.cache.read("#{superclazz}/ExistenceHash/Flag")
+      new_main_key = superclazz.eh_key_gen new_key, :class => new_clazz
+      old_main_key = superclazz.eh_key_gen old_key, :class => old_clazz
+
+      flag_key = superclazz.eh_key_gen "Flag"
+      flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
 
       if flag.nil?
         flag = self.class.initialize_existence_hash
@@ -161,9 +199,10 @@ module FlagpoleSitta
         #if there are empty containers use them
         if flag[:empty] > -1
           #Find any empty container to use by popping it off of the top of the "stack".
-          i = Rails.cache.read("#{superclazz}/ExistenceHash/EmptyStack/#{flag[:empty]}")
+          empty_key = superclazz.eh_key_gen flag[:empty], :emptystack => true
+          i = FlagpoleSitta::CommonFs.flagpole_cache_read(empty_key)
           #Sense its going to be used remove its reference from the Stack.
-          Rails.cache.delete("#{superclazz}/ExistenceHash/EmptyStack/#{flag[:empty]}")
+          FlagpoleSitta::CommonFs.flagpole_cache_delete(empty_key)
           #Update the empty on flag to now hit the newest none used container on the stack.
           flag[:empty] = flag[:empty] - 1
         #Else add a space to the end.
@@ -175,30 +214,33 @@ module FlagpoleSitta
         hash = {:type => new_clazz, :num => self.has_attribute?('num') ? (self.num || 0) : 0, :pos => i}
       #If its an already existing record them get its existence hash, and then remove it from the cache.
       else
-        hash = Rails.cache.read("#{superclazz}/ExistenceHash/#{old_clazz}/#{old_key}")
+        hash = FlagpoleSitta::CommonFs.flagpole_cache_read(old_main_key)
         hash[:type] = new_clazz
       end
 
+      array_main_key = superclazz.eh_key_gen hash[:pos]
+
       #Before new info gets written make sure to delete all the old records just in case. The New location before it gets used too.
-      Rails.cache.delete("#{superclazz}/ExistenceHash/#{new_clazz}/#{new_key}")
-      Rails.cache.delete("#{superclazz}/ExistenceHash/#{old_clazz}/#{old_key}")
-      Rails.cache.delete("#{superclazz}/ExistenceHash/#{hash[:pos]}")
+      FlagpoleSitta::CommonFs.flagpole_cache_delete(new_main_key)
+      FlagpoleSitta::CommonFs.flagpole_cache_delete(old_main_key)
+      FlagpoleSitta::CommonFs.flagpole_cache_delete(array_main_key)
 
       #If the record is not being destroyed add new route_id to existence hash
       if alive
-        Rails.cache.write("#{superclazz}/ExistenceHash/#{new_clazz}/#{new_key}", hash)
-        Rails.cache.write("#{superclazz}/ExistenceHash/#{hash[:pos]}", {:type => new_clazz, :key => new_key})
+        FlagpoleSitta::CommonFs.flagpole_cache_write(new_main_key, hash)
+        FlagpoleSitta::CommonFs.flagpole_cache_write(array_main_key, {:type => new_clazz, :key => new_key})
       else
         if hash[:pos] == flag[:space]
           flag[:space] = flag[:space] - 1
         else
           flag[:empty] = flag[:empty] + 1
-          Rails.cache.write("#{superclazz}/ExistenceHash/EmptyStack/#{flag[:empty]}", hash[:pos])
+          empty_key = superclazz.eh_key_gen flag[:empty], :emptystack => true
+          FlagpoleSitta::CommonFs.flagpole_cache_write(empty_key, hash[:pos])
         end
         flag[:count] = flag[:count] - 1
       end
 
-      Rails.cache.write("#{superclazz}/ExistenceHash/Flag", flag)
+      FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
 
     end
 

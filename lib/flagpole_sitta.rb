@@ -8,9 +8,9 @@ module FlagpoleSitta
     yield self
   end
 
-
 end
 
+require 'flagpole_sitta/common_fs'
 require 'flagpole_sitta/bracket_retrieval'
 require 'flagpole_sitta/cache_sitta'
 require 'flagpole_sitta/existence_hash'
