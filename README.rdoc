@@ -14,13 +14,16 @@ The rottenness and evil in me.
 
 ===This gem should be considered in beta.
 
+===Before You Use read This.
+https://github.com/rovermicrover/FlagpoleSitta/wiki/Before-You-Use-Read-This
+
 This gem was inspired in part by the song Flagpole Sitta by Harvey Danger. So if you like the gem and are wanting to help out please either donate your time and submit some patches, or donate to the band who wrote the song. They put there last two albums out there all open source like, only asking that those that could donate after downloading. While your donating, if you choose to do so, don't be afraid to download their albums, its good stuff!
 
 http://www.harveydanger.com/contribute.php
 
 My grammar ability's are fail. So if something doesn't make sense in the docs don't be afraid to point it out and/or submit a patch. Because to me it all looks right.....
 
-This gem has also only so far been tested with Memcache using the Dalli gem. File System caching and memory caching are not recommended. Redis/Memcache are defiantly suggested and strongly encouraged for this gem.
+File System caching and memory caching are not recommended. Redis/Memcache are defiantly suggested and strongly encouraged for this gem. If your using a cloud solution redis more then memecached for reasons stated in the "Before you use read this." seciton of the wiki.
 
 == Inspiration
 
