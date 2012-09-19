@@ -94,7 +94,7 @@ module FlagpoleSitta
         flag_key = array_cache_key_gen "Flag", options[:route_id]
         FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
 
-        key
+        array_key
 
       end
 

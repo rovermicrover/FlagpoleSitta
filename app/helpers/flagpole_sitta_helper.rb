@@ -8,6 +8,29 @@ module FlagpoleSittaHelper
     model.try(:update_array_cache, key, :route_id => route_id)
   end
 
+  #In case an unsafe param gets passed. 
+  #Don't want to save SQL injection attempts in the cache.
+  def clean_options options={}
+
+    result = Hash.new
+
+    options.each do |k,v|
+      #If it fails its not a string and it doesn't need to be 
+      #sanitized anyway.
+      begin
+        clean_v = sanitize(v)
+      rescue
+        clean_v = v
+      end
+
+      result[k] = clean_v
+
+    end
+
+    result
+
+  end
+
   ##
   #AR - cache_sitta helper
   #NOTE This is not safe for .builder xml files.
@@ -64,6 +87,8 @@ module FlagpoleSittaHelper
   #and while it boils down to a call by id, they can still add up if you don't pay attention.
   def cache_sitta  options={}, &block
 
+    options = clean_options(options)
+
     if options[:route_id].class.eql?(Array)
       main_route_id = options[:route_id][0]
     else
@@ -77,10 +102,6 @@ module FlagpoleSittaHelper
       else
         main_model = options[:model]
       end
-
-    elsif params[:model]
-
-      main_model = params[:model]
 
     elsif options[:models_in_index]
 
