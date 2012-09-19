@@ -200,29 +200,35 @@ module FlagpoleSitta
 
     #Updates the cache after update of any cache sittaed item.
     def cache_work(alive)
-      original_clazz = self.class
-      # Also have to go through all its super objects till the super objects aren't cache sittaed
-      # this is because the new updated object for a sub class, could have also been in a cache for
-      # said sub class, but also in a cache for its super.
-      cur_clazz = original_clazz
-      while(cur_clazz.respond_to? :destroy_array_cache)
+      begin
+        original_clazz = self.class
+        # Also have to go through all its super objects till the super objects aren't cache sittaed
+        # this is because the new updated object for a sub class, could have also been in a cache for
+        # said sub class, but also in a cache for its super.
+        cur_clazz = original_clazz
+        while(cur_clazz.respond_to? :destroy_array_cache)
 
-        #AR - Clear all caches related to the old route_id
-        cur_clazz.destroy_array_cache(:route_id => self.try(:send, ("#{cur_clazz.route_id}_was")).to_s)
-        #AR - Clear all caches related to the new route_id just in case
-        cur_clazz.destroy_array_cache(:route_id => self.try(:send, ("#{cur_clazz.route_id}")).to_s)
-        #AR - If the new and old are the same All that will happen on the second call is that
-        #it will write the flag out and then destroy it. A very tiny bit of work
-        #for a great amount of extra protection.
+          #AR - Clear all caches related to the old route_id
+          cur_clazz.destroy_array_cache(:route_id => self.try(:send, ("#{cur_clazz.route_id}_was")).to_s)
+          #AR - Clear all caches related to the new route_id just in case
+          cur_clazz.destroy_array_cache(:route_id => self.try(:send, ("#{cur_clazz.route_id}")).to_s)
+          #AR - If the new and old are the same All that will happen on the second call is that
+          #it will write the flag out and then destroy it. A very tiny bit of work
+          #for a great amount of extra protection.
 
-        # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
-        cur_clazz.destroy_array_cache(:obj => self)
+          # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
+          cur_clazz.destroy_array_cache(:obj => self)
 
-        cur_clazz = cur_clazz.superclass
+          cur_clazz = cur_clazz.superclass
+        end
+
+        #AR - For Safety this will not recurse upwards for the extra cache maintenance
+        extra_cache_maintenance(alive)
+      rescue
+        #Keep ending up with one of the array objects having a key of nil. Despite the fact that it would have to at least start with /view
+        #becuase of the way its set up in the helper. If that happens all bets are off and just clear everything.
+        Rails.cache.clear
       end
-
-      #AR - For Safety this will not recurse upwards for the extra cache maintenance
-      extra_cache_maintenance(alive)
 
     end
 
