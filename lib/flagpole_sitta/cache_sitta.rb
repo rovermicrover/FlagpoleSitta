@@ -112,9 +112,7 @@ module FlagpoleSitta
           for i in 0..flag[:space] do
             array_key = array_cache_key_gen i, route_id
             hash = FlagpoleSitta::CommonFs.flagpole_cache_read(array_key)
-            if hash
-              yield hash
-            end
+            yield hash
           end
         end
 
@@ -125,63 +123,40 @@ module FlagpoleSitta
       #Nukes all corresponding caches for a given array.
       def destroy_array_cache options={}
 
-        i = 0
-
         each_cache options[:route_id] do |hash|
-          #A Check in Case there is some type of cache failure
-          if hash.present?
-            #If it has no scope, or it falls in scope
-            if hash[:scope].nil? || options[:obj].in_scope(hash[:scope])
-              #Get all the associated.
-              associated = FlagpoleSitta::CommonFs.flagpole_cache_read(hash[:key])[:associated]
-              puts hash[:key]
-              #Destroy the actually cache
-              FlagpoleSitta::CommonFs.flagpole_cache_delete(hash[:key])
-              associated.each do |a|
-                #Get the base key
-                base_key = a.gsub(/\/[^\/]*\z/, "")
-                #Get the flag. Capture the god damn flag!
-                flag_key = base_key + "/Flag"
-                #Get its location in the 'Array'
-                n = a.split("/").last
-                # Check in case of cache failure
-                if flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
-                  #Add an empty spot to the 'Array'
-                  flag[:empty] = flag[:empty] + 1
-                  empty_stack_key = base_key + "/EmptyStack/" + flag[:empty].to_s
-                  #Save the empty spot location to the 'Stack'
-                  FlagpoleSitta::CommonFs.flagpole_cache_write(empty_stack_key, n)
-                  #Update the flag
-                  FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
-                end
-
-                #Finally get rid of the associated cache object.
-                FlagpoleSitta::CommonFs.flagpole_cache_delete(a)
-
+          #A Check in Case there is some type of cache failure, or it is an empty spot, also if it has no scope, or it falls in scope
+          if hash.present? && (hash[:scope].nil? || options[:obj].in_scope(hash[:scope]))
+            #Get all the associated.
+            associated = FlagpoleSitta::CommonFs.flagpole_cache_read(hash[:key])[:associated]
+            Rails.logger.info "#{hash[:key]} is being cleared"
+            #Destroy the actually cache
+            FlagpoleSitta::CommonFs.flagpole_cache_delete(hash[:key])
+            #The associated objects will always include the object we got the actually cache from
+            associated.each do |a|
+              #Get the base key
+              base_key = a.gsub(/\/[^\/]*\z/, "")
+              #Get the flag. Capture the god damn flag!
+              flag_key = base_key + "/Flag"
+              #Get its location in the 'Array'
+              n = a.split("/").last
+              # Check in case of cache failure
+              if flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
+                #Add an empty spot to the 'Array'
+                flag[:empty] = flag[:empty] + 1
+                empty_stack_key = base_key + "/EmptyStack/" + flag[:empty].to_s
+                #Save the empty spot location to the 'Stack'
+                FlagpoleSitta::CommonFs.flagpole_cache_write(empty_stack_key, n)
+                #Update the flag
+                FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
               end
-            #Else It is not in scope so the cache lives to fight another day!
-            else
-              key = array_cache_key_gen i, options[:route_id]
-              FlagpoleSitta::CommonFs.flagpole_cache_write(key, hash)
-              i = i + 1
+
+              #Finally get rid of the associated cache object.
+              FlagpoleSitta::CommonFs.flagpole_cache_delete(a)
             end
+          #Else It is not in scope so the cache lives to fight another day!
           end
         end
 
-
-        flag_key = array_cache_key_gen "Flag", options[:route_id]
-        #If everything was deleted destroy the flag.
-        if i == 0
-          FlagpoleSitta::CommonFs.flagpole_cache_delete(flag_key)
-        #Else update the flag
-        else
-          flag = FlagpoleSitta::CommonFs.flagpole_cache_read(flag_key)
-          flag[:space] = (i - 1)
-          #Sense we moved through every object and moved all the remaining objects down
-          #there should be no empty spaces.
-          flag[:empty] = -1
-          FlagpoleSitta::CommonFs.flagpole_cache_write(flag_key, flag)
-        end
       end
 
     end
@@ -224,10 +199,15 @@ module FlagpoleSitta
 
         #AR - For Safety this will not recurse upwards for the extra cache maintenance
         extra_cache_maintenance(alive)
-      rescue
+      rescue Exception => e  
         #Keep ending up with one of the array objects having a key of nil. Despite the fact that it would have to at least start with /view
         #becuase of the way its set up in the helper. If that happens all bets are off and just clear everything.
         Rails.cache.clear
+        Rails.logger.error("CACHE FAILURE @BEFORE STATE CHANGE CACHE IS BEING NUKED :: FLAGPOLE_SITTA")
+        Rails.logger.error(e.message)
+        e.backtrace.inspect.each do |b|
+          Rails.logger.error(b)
+        end
       end
 
     end
@@ -236,16 +216,26 @@ module FlagpoleSitta
     #saved fits into any cache's scope. The above call to clear index caches is basically the object_was call, while this is just the call 
     #for the update object.
     def post_cache_work
-      original_clazz = self.class
-      cur_clazz = original_clazz
+      begin
+        original_clazz = self.class
+        cur_clazz = original_clazz
 
-      while(cur_clazz.respond_to? :destroy_array_cache)
-        # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
-        cur_clazz.destroy_array_cache(:obj => self)
+        while(cur_clazz.respond_to? :destroy_array_cache)
+          # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
+          cur_clazz.destroy_array_cache(:obj => self)
 
-        cur_clazz = cur_clazz.superclass
+          cur_clazz = cur_clazz.superclass
+        end
+      rescue Exception => e  
+        #Keep ending up with one of the array objects having a key of nil. Despite the fact that it would have to at least start with /view
+        #becuase of the way its set up in the helper. If that happens all bets are off and just clear everything.
+        Rails.cache.clear
+        Rails.logger.error("CACHE FAILURE @AFTER_SAVE CACHE IS BEING NUKED :: FLAGPOLE_SITTA")
+        Rails.logger.error(e.message)
+        e.backtrace.inspect.each do |b|
+          Rails.logger.error(b)
+        end
       end
-
     end
 
     #AR - For Safety this will not recurse upwards for the extra cache maintenance
