@@ -205,8 +205,13 @@ module FlagpoleSitta
         Rails.cache.clear
         Rails.logger.error("CACHE FAILURE @BEFORE STATE CHANGE CACHE IS BEING NUKED :: FLAGPOLE_SITTA")
         Rails.logger.error(e.message)
-        e.backtrace.inspect.each do |b|
-          Rails.logger.error(b)
+        e.backtrace.each do |b|
+          Rails.logger.error("\t" + b.to_s)
+        end
+        puts "CACHE FAILURE @BEFORE STATE CHANGE CACHE IS BEING NUKED :: FLAGPOLE_SITTA"
+        puts e.message
+        e.backtrace.each do |b|
+            puts "\t" + b.to_s
         end
       end
 
@@ -232,8 +237,13 @@ module FlagpoleSitta
         Rails.cache.clear
         Rails.logger.error("CACHE FAILURE @AFTER_SAVE CACHE IS BEING NUKED :: FLAGPOLE_SITTA")
         Rails.logger.error(e.message)
-        e.backtrace.inspect.each do |b|
-          Rails.logger.error(b)
+        e.backtrace.each do |b|
+          Rails.logger.error("\t" + b.to_s)
+        end
+        puts "CACHE FAILURE @AFTER_SAVE CACHE IS BEING NUKED :: FLAGPOLE_SITTA"
+        puts e.message
+        e.backtrace.each do |b|
+            puts "\t" + b.to_s
         end
       end
     end
