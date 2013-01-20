@@ -1,7 +1,7 @@
 class CacheHash
 
   def initialize model, route_id = nil
-    @model = model.constantize
+    @model = model.responsed_to?(:constantize) ? model.constantize : model
 
     @route_id = route_id
 
@@ -38,6 +38,8 @@ class CacheHash
       end
 
     end
+
+    nil
 
   end
 

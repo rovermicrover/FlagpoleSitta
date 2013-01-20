@@ -12,14 +12,6 @@ module FlagpoleSitta
 
     module ClassMethods
 
-      def existance_hash
-        @@existance_hash
-      end
-
-      def counter_hash
-        @@counter_hash
-      end
-
        #Options :emptystack will make it generate a key for the emptystack instead of the general cache array.
       def eh_key_gen
 
@@ -40,63 +32,43 @@ module FlagpoleSitta
 
       #Creates the 'hash' in the cache.
 
-      def initialize_counter_hash
-        if not @@counter_hash
+      def initialize_c_a_hashes
+        if !@@counter_hash || !@@existance_hash
 
           get_super_with_existence_hash
 
           flag_key = ch_key_gen
 
-          counter_hash = Redis::HashKey.new(flag_key, :marshal => true)
+          @@counter_hash = Redis::HashKey.new(flag_key, :marshal => true)
+          @@existance_hash = Redis::HashKey.new(flag_key, :marshal => true)
 
-          i = 0
           @@superclazz.find_each do |m|
-            counter_hash[m.send(m.class.route_id)] = m.has_attribute?('num') ? (m.num || 0) : 0
+            @@counter_hash[m.send(m.class.route_id)] = m.has_attribute?('num') ? (m.num || 0) : 0
+            @@existance_hash[m.send(m.class.route_id)] = m.class
           end
 
-          counter_hash
-
-        else
-          @@counter_hash
         end
-      end
-
-      def initialize_existence_hash
-
-        if not @@existance_hash
-
-          get_super_with_existence_hash
-
-          flag_key = eh_key_gen
-
-          existance_hash = Redis::HashKey.new(flag_key, :marshal => true)
-
-          i = 0
-          @@superclazz.find_each do |m|
-            existance_hash[m.send(m.class.route_id)] = m.class
-          end
-
-          existance_hash
-
-        else
-          @@existance_hash
-        end
-
       end
 
       #Gets a value from the 'hash' in the cache given a key.
       def get_existence_hash key
+        initialize_c_a_hashes
 
-        {:type => @@existance_hash[key], :num => @@counter_hash[key]}
+        if (type = @@existance_hash[key]) && (num = @@counter_hash[key])
+          {:type => type, :num => num}
+        else
+          nil
+        end
 
       end
 
       #Increments a value from the 'hash' in the cache given a key.
       def increment_existence_hash key
+        initialize_c_a_hashes
 
-        if @@counter_hash[key]
+        if (result = get_existence_hash key)
           @@counter_hash.incr(key)
-          get_existence_hash key
+          result
         else
           nil
         end
@@ -105,10 +77,11 @@ module FlagpoleSitta
 
       #Goes through each entry in the hash returning a key and value
       def each_existence_hash &block
+        initialize_c_a_hashes
 
-        @@existance_hash.each do |key, value|
+        @@existance_hash.each do |key, type|
 
-          if value.present? && value.eql?(clazz)
+          if type.present? && type.eql?(clazz)
             cur = get_existence_hash key
             yield cur
           end
@@ -141,9 +114,6 @@ module FlagpoleSitta
 
     end
 
-    @@existance_hash = initialize_existence_hash
-    @@counter_hash = initialize_counter_hash
-
     def existence_hash_save_update
       self.update_existence_hash(true)
     end
@@ -154,7 +124,7 @@ module FlagpoleSitta
 
     #Updates the 'hash' on save of any of its records.
     def update_existence_hash alive
-
+      initialize_c_a_hashes
       #Get the Current Class and the Old Class in case the object changed classes.
       #If its the base object, ie type is nil, then return class as the old_clazz.
       #If the object doesn't have the type field assume it can't change classes.
@@ -175,10 +145,13 @@ module FlagpoleSitta
       
       #If its a new record and its alive add it to the 'hash'
       if self.new_record? && alive
+
         @@superclazz.existance_hash[new_key] = self.class
         @@superclazz.counter_hash[new_key] = 0
+
       #Else move forward unless its a new record that is not alive
       elsif !self.new_record?
+
         #If the record is dying just remove it
         if !alive
           @@superclazz.existance_hash.delete(old_key)
@@ -196,6 +169,7 @@ module FlagpoleSitta
         elsif !new_class.eql?(old_class)
           @@superclazz.existance_hash[old_key] = new_class
         end
+
       end
 
     end

@@ -1,11 +1,11 @@
 module FlagpoleSittaHelper
 
   def update_index_array_cache model, key, scope=nil
-    model.try(:update_array_cache, key, :scope => scope)
+    model.try(:update_cache_hash, key, :scope => scope)
   end
 
   def update_show_array_cache model, key, route_id
-    model.try(:update_array_cache, key, :route_id => route_id)
+    model.try(:update_cache_hash, key, :route_id => route_id)
   end
 
   #In case an unsafe param gets passed. 

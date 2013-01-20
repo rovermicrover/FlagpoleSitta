@@ -39,11 +39,23 @@ module FlagpoleSitta
 
     module ClassMethods
 
-      def get_br_key key
+      def clazz
 
-        clazz = self
+        self
 
-        "#{clazz}/BracketRetrieval/#{key}"
+      end
+
+      def initialize_bracket_retrieval_hash
+        if !@bracket_retrieval_hash
+          @bracket_retrieval_hash = Redis::HashKey.new(get_br_key, :marshal => true)
+        else
+          @bracket_retrieval_hash
+        end
+      end
+
+      def get_br_key
+
+        "#{clazz}/BracketRetrieval"
 
       end
 
@@ -68,32 +80,39 @@ module FlagpoleSitta
         result = @_default_value || (self.superclass.respond_to?(:default_value) ? self.superclass.default_value : nil) || ""
       end
 
+      def make_safe value
+        value = value.present? ? value : nil
+        if self.safe_content? && value.respond_to?(:html_safe)
+          value = value.html_safe
+        end
+
+        value
+      end
+
       def [] key 
-        clazz = self
+        initialize_bracket_retrieval_hash
+
         #If its in cache return that, unless blank, then return nil.
-        if value = FlagpoleSitta::CommonFs.flagpole_cache_read(get_br_key(key)) || FlagpoleSitta::CommonFs.flagpole_cache_exist?(get_br_key(key))
-          if value.present?
-            value = self.safe_content? ? value.html_safe : value
-          else
-            #Always return nil even if the return value is blank.
-            #Also if its blank we don't want to try to create it again
-            #thus the reason for this odd nested if statement.
-            value = nil
-          end
+        if value = @bracket_retrieval_hash[key]
+          #Do nothing object is good to go
         #Else if the object is in the database put it into the cache then return it.
         elsif obj = self.send("find_by_#{self.key_field}", key)
           value = obj.send(self.value_field)
-          FlagpoleSitta::CommonFs.flagpole_cache_write(get_br_key(key), value)
-          value = value && self.safe_content? ? value.html_safe : value
-        #Else create the corresponding object as blank, and return nil.
+          @bracket_retrieval_hash[key] = value
+          value = make_safe value
+        #Else create the corresponding object as blank, and return the default value.
         #The last line there is why this extension should never be used with user generated content.
+        #But return nil if its not present.
         else
-          rec = self.create(self.key_field.to_sym => key, self.value_field.to_sym => self.default_value)
-          FlagpoleSitta::CommonFs.flagpole_cache_write(get_br_key(key), rec.send(self.value_field))
-          value = nil
+          value = self.default_value
+          rec = self.create(self.key_field.to_sym => key, self.value_field.to_sym => value)
+          @bracket_retrieval_hash[key] = rec.send(self.value_field)
         end
-        value
+
+        value = make_safe value
+
       end
+
     end
 
   end
