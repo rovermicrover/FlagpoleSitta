@@ -10,6 +10,7 @@ module FlagpoleSitta
 
 end
 
+require 'redis/hash_key'
 require 'flagpole_sitta/common_fs'
 require 'flagpole_sitta/bracket_retrieval'
 require 'flagpole_sitta/cache_sitta'

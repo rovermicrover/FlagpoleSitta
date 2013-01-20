@@ -16,6 +16,8 @@ Gem::Specification.new do |s|
 
   #Dependencies
   #This is just for now until I can test it with out adapters.
-  s.add_dependency('dalli')
+  s.add_dependency('redis')
+  s.add_dependency('redis-rails')
+  s.add_dependency('redis-objects')
 
 end

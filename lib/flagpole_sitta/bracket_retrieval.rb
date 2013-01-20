@@ -6,8 +6,8 @@ module FlagpoleSitta
     extend ActiveSupport::Concern
 
     included do
-      validates_uniqueness_of (@_key_field || "name").to_sym
-      validates_presence_of (@_key_field || "name").to_sym
+      validates_uniqueness_of (@_key_field || "key").to_sym
+      validates_presence_of (@_key_field || "key").to_sym
       before_save :br_update_save
       before_destroy :br_update_destroy
     end

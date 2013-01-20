@@ -8,6 +8,10 @@ module FlagpoleSitta
         "#{Rails.application.class.to_s.split("::").first}/#{Rails.env}/"
       end
 
+      def flagpole_full_key key
+        app_hash_namespace + key.to_s
+      end
+
       def flagpole_cache_read key
         Rails.cache.read(app_hash_namespace + key.to_s)
       end

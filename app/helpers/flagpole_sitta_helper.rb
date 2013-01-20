@@ -15,13 +15,18 @@ module FlagpoleSittaHelper
     result = Hash.new
 
     options.each do |k,v|
-      #If it fails its not a string and it doesn't need to be 
-      #sanitized anyway.
+      #First make sure they aren't trying to put some nasty html in.
       begin
         clean_v = sanitize(v)
       rescue
         clean_v = v
       end
+
+      #Scopes are then sanitized before they are placed in via the methods on the model
+
+      #Next try to make sure they aren't trying to inject anything via a dynamic scope
+
+
 
       result[k] = clean_v
 
