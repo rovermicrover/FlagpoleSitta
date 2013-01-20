@@ -23,16 +23,18 @@ module FlagpoleSitta
     #After update destroy old cache and write new one.
     def br_update alive
 
-      clazz = self.class
+      self.class.initialize_bracket_retrieval_hash
 
-      key = clazz.get_br_key(self.send(self.class.key_field + "_was"))
+      key = self.class.key_field + "_was"
 
-      FlagpoleSitta::CommonFs.flagpole_cache_delete(key)
+      bracket_retrieval_hash = self.class.instance_variable_get(:@bracket_retrieval_hash)
+
+      bracket_retrieval_hash.delete(key)
 
       if alive
-        key = clazz.get_br_key(self.send(self.class.key_field))
+        key = self.send(self.class.key_field)
         value = self.send(self.class.value_field)
-        FlagpoleSitta::CommonFs.flagpole_cache_write(key, value)
+        bracket_retrieval_hash[key] = value
       end
       
     end

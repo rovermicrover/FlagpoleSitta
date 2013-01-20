@@ -11,9 +11,11 @@ module FlagpoleSitta
 end
 
 require 'redis/hash_key'
+require 'redis/value'
 require 'flagpole_sitta/common_fs'
 require 'flagpole_sitta/bracket_retrieval'
 require 'flagpole_sitta/cache_sitta'
+require 'flagpole_sitta/cache_hash'
 require 'flagpole_sitta/existence_hash'
 require 'flagpole_sitta/engine'
 require 'flagpole_sitta/config_sitta'
