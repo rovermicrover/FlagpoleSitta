@@ -37,6 +37,7 @@ module FlagpoleSitta
       def cache_sitta options = {}
         @_fs_route_id ||= options[:route_id]
         @_cs_time_col ||= options[:time_column]
+        @_cs_watch_assoc ||= options[:watch_assoc]
         include FlagpoleSitta::CacheSitta
       end
 

@@ -9,15 +9,23 @@ module FlagpoleSitta
     extend ActiveSupport::Concern
 
     included do
-      before_save :cache_sitta_save
-      after_save :cache_sitta_after_save
-      before_destroy :cache_sitta_destory
+      before_save :cache_sitta_before_update
+      after_save :cache_sitta_after_update
+      before_destroy :cache_sitta_before_update
+
+      before_save :cache_sitta_before_update_assoc
+      after_save :cache_sitta_after_update_assoc
+      before_destroy :cache_sitta_before_update_assoc
     end
 
     module ClassMethods
 
       def cs_time_col
         @_cs_time_col ||= (self.superclass.respond_to?(:cs_time_col) ? self.superclass.cs_time_col : :created_at)
+      end
+
+      def cs_watch_assoc
+        @_cs_watch_assoc ||= (self.superclass.respond_to?(:cs_watch_assoc) ? self.superclass.cs_watch_assoc : nil)
       end
 
       def get_model model
@@ -83,82 +91,108 @@ module FlagpoleSitta
       self.try(:send, ("#{clazz.cs_time_col}_was"))
     end
 
-    def cache_sitta_save
-      self.cache_work(true)
+    def cache_sitta_before_update
+      self.cache_work true
     end
 
-    def cache_sitta_after_save
-      self.post_cache_work
-    end
-
-    def cache_sitta_destory
-      self.cache_work(false)
+    def cache_sitta_after_update
+      self.cache_work false
     end
 
     #Updates the cache after update of any cache sittaed item.
-    def cache_work(alive)
+    def cache_work before
       original_clazz = self.class
-      # Also have to go through all its super objects till the super objects aren't cache sittaed
-      # this is because the new updated object for a sub class, could have also been in a cache for
-      # said sub class, but also in a cache for its super.
-      cur_clazz = original_clazz
-      while(cur_clazz.respond_to? :destroy_cache_hash)
+      #Have to go through all possibilities so have
+      #to go down and up the chain of inheritance here.
 
-        #AR - Clear all caches related to the old route_id
-        cur_clazz.destroy_cache_hash(:route_id => self.route_id_was(cur_clazz).to_s)
+      #Go down the chain of inheritance
+      decedents = original_clazz.descendants
+      cache_work_descedants before, decedents
 
-        #AR - Clear all caches related to the old time col value
-        # Don't run if time is nil. It can't be index by time
-        # if time is nil anyway.
-        time_was = self.cs_time_col_was(cur_clazz)
-        if time_was
-          cur_clazz.destroy_time_caches(time_was)
-        end
-
-        # AR - Clear all index caches where old object state is in scope
-        cur_clazz.destroy_cache_hash(:obj => self)
-
-        cur_clazz = cur_clazz.superclass
-      end
-
-      #AR - For Safety this will not recurse upwards for the extra cache maintenance
-      extra_cache_maintenance(alive)
-    end
-
-    #Sense the checking the scope requires the object to be in the database, this has to be called in case the new version that has been 
-    #saved fits into any cache's scope. The above call to clear index caches is basically the object_was call, while this is just the call 
-    #for the update object.
-    #Also in case they are using the updated_at as the time stamp time destroy must happen here.
-    def post_cache_work
-      original_clazz = self.class
       cur_clazz = original_clazz
 
+      #Now go up the chain of inheritance till you hit Active::Record Base
       while(cur_clazz.respond_to? :destroy_cache_hash)
-        #AR - Clear all caches related to the new route_id
-        cur_clazz.destroy_cache_hash(:route_id => self.route_id(cur_clazz).to_s)
 
-        #AR - Clear all caches related to the new time col value
-        # Don't run if time is nil. It can't be index by time
-        # if time is nil anyway.
-        time = self.cs_time_col(cur_clazz)
-        if time
-          cur_clazz.destroy_time_caches(time)
-        end
-
-        # AR - Clear all index caches where new object state is in scope
-        cur_clazz.destroy_cache_hash(:obj => self)
+        cache_work_real_work before, cur_clazz
 
         cur_clazz = cur_clazz.superclass
-      end
 
-      extra_cache_maintenance(true)
+      end
 
     end
 
-    #AR - For Safety this will not recurse upwards for the extra cache maintenance
-    def extra_cache_maintenance alive
-      method = (@_cache_extra_maintance || Proc.new{})
-      method.call
+    def cache_work_descedants before, decedents
+
+      decedents.each do |d|
+        cache_work_descedants before, d.descendants
+        cache_work_real_work before, d
+      end
+
+    end
+
+    def cache_work_real_work before, clazz
+      if before
+        ending = "_was"
+      else
+        ending = ""
+      end
+      #AR - Clear all caches related to the old or new route_id
+      clazz.destroy_cache_hash(:route_id => self.send("route_id#{ending}",clazz).to_s)
+
+      #AR - Clear all caches related to the old or new time col value
+      # Don't run if time is nil. It can't be index by time
+      # if time is nil anyway.
+      time = self.send("cs_time_col#{ending}", clazz)
+      if time
+        clazz.destroy_time_caches(time)
+      end
+
+      # AR - Clear all index caches where old object state is in scope
+      clazz.destroy_cache_hash(:obj => self)
+    end
+
+    def cache_sitta_before_update_assoc
+      if assoc = self.class.cs_watch_assoc
+        cache_work_assoc(assoc, true)
+      end
+    end
+
+    def cache_sitta_after_update_assoc
+      if assoc = self.class.cs_watch_assoc
+        cache_work_assoc(assoc, false)
+      end
+    end
+
+    def cache_work_assoc assoc, before
+      if before
+        state = self.class.find(self.id)
+      else
+        state = self
+      end
+
+      if !assoc.class.eql?(Array)
+        assoc = [] << assoc
+      end
+      assoc = assoc.compact
+
+      assoc.each do |a|
+        assoc_objs = state.send(a)
+
+        if !assoc_objs.class.eql?(Array)
+          assoc_objs = [] << assoc_objs
+        end
+        assoc_objs = assoc_objs.compact
+
+        puts a
+        puts assoc_objs
+
+        assoc_objs.each do |ao|
+          puts ao
+          ao.cache_work(before)
+        end
+      end
+
     end
 
   end

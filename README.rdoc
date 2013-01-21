@@ -220,7 +220,7 @@ This amounts to a very small specific cache_sitta call. For now its suggested to
 
 More examples to come in the wiki, and in the coming example app.
 
-Also if for what ever reason you have made your app multi threaded this gem will break. If your interested in possible making it multithread safe the following link has some good info.
+If you have made your app multi threaded this gem will break. If your interested in possible making it multithread safe the following link has some good info.
 
 http://stackoverflow.com/a/1390978/1436131
 
