@@ -63,23 +63,27 @@ module FlagpoleSitta
 
       #Will look up the object chain till it finds what it was set to, or not set too.
       def safe_content?
-        result = @_safe_content || (self.superclass.respond_to?(:safe_content?) ? self.superclass.safe_content? : nil) || false
+        if @_br_safe_content.nil? 
+          @_br_safe_content = (self.superclass.respond_to?(:safe_content) ? self.superclass.safe_content : false)
+        else
+          @_br_safe_content
+        end
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too.
       def key_field
-        result = @_key_field || (self.superclass.respond_to?(:key_field) ? self.superclass.key_field : nil) || "name"
+        @_br_key_field ||= (self.superclass.respond_to?(:key_field) ? self.superclass.key_field : "name")
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too.
       def value_field
-        result = @_value_field || (self.superclass.respond_to?(:value_field) ? self.superclass.value_field : nil) || "content"
+        @_br_value_field ||= (self.superclass.respond_to?(:value_field) ? self.superclass.value_field : "content")
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too. 
       #Default value cannot be nil.
       def default_value
-        result = @_default_value || (self.superclass.respond_to?(:default_value) ? self.superclass.default_value : nil) || ""
+        @_br_default_value ||= (self.superclass.respond_to?(:default_value) ? self.superclass.default_value : "")
       end
 
       def make_safe value

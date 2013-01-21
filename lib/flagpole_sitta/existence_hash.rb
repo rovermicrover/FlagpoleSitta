@@ -12,6 +12,14 @@ module FlagpoleSitta
 
     module ClassMethods
 
+      def update_ehnum_after
+        @_eh_update_ehnum_after ||= (self.superclass.respond_to?(:update_ehnum_after) ? self.superclass.update_ehnum_after : 0)
+      end
+
+      def ehnum_col
+        @_eh_ehnum_col ||= (self.superclass.respond_to?(:ehnum_col) ? self.superclass.ehnum_col : :eh_num)
+      end
+
        #Options :emptystack will make it generate a key for the emptystack instead of the general cache array.
       def eh_key_gen
 
@@ -60,9 +68,13 @@ module FlagpoleSitta
           @counter_hash = Redis::HashKey.new(flag_key_ch, :marshal => true)
           @existance_hash = Redis::HashKey.new(flag_key_eh, :marshal => true)
 
-          @superclazz.find_each do |m|
-            @counter_hash[m.send(m.class.route_id)] = m.has_attribute?('num') ? (m.num.to_i || 0) : 0
-            @existance_hash[m.send(m.class.route_id)] = m.class
+          if @counter_hash.empty? || @existance_hash.empty?
+
+            @superclazz.find_each do |m|
+              @counter_hash[m.send(m.class.route_id)] = m.has_attribute?(ehnum_col) ? (m.send(ehnum_col).to_i || 0) : 0
+              @existance_hash[m.send(m.class.route_id)] = m.class
+            end
+
           end
 
           @initcheck = Redis::Value.new(flag_key_init)
@@ -77,12 +89,8 @@ module FlagpoleSitta
       #Gets a value from the 'hash' in the cache given a key.
       def get_existence_hash key
         initialize_c_a_hashes
-
-        puts @existance_hash.to_a
-        puts @counter_hash.to_a
-
         if (type = @existance_hash[key]) && (num = @counter_hash[key])
-          {:type => type, :num => num}
+          {:type => type, :num => num.to_i}
         else
           nil
         end
@@ -93,15 +101,18 @@ module FlagpoleSitta
       def increment_existence_hash key
         initialize_c_a_hashes
 
-        puts @existance_hash.to_a
-        puts @counter_hash.to_a
-
         if (result = get_existence_hash key)
           @counter_hash.incr(key)
-          result
-        else
-          nil
+          result[:num] = result[:num] + 1
+          if update_ehnum_after > 0 && (result[:num] % update_ehnum_after == 0)
+            record = self.send("find_by_#{self.route_id}", key)
+            if record.has_attribute?(ehnum_col)
+              record.update_attribute(ehnum_col, result[:num])
+            end
+          end
         end
+
+        result
 
       end
 
@@ -168,9 +179,6 @@ module FlagpoleSitta
       if old_clazz.class.eql?(String)
         old_clazz = old_clazz.constantize
       end
-
-      puts self.class.existance_hash
-      puts self.class.counter_hash
 
       #Old key is where it was, and new is where it is going.
       new_key = self.send("#{new_clazz.route_id}")

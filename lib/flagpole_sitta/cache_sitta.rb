@@ -16,6 +16,10 @@ module FlagpoleSitta
 
     module ClassMethods
 
+      def cs_time_col
+        @_cs_time_col ||= (self.superclass.respond_to?(:cs_time_col) ? self.superclass.cs_time_col : :created_at)
+      end
+
       def get_model model
         model || self
       end
@@ -32,7 +36,11 @@ module FlagpoleSitta
           options[:scope] = sanitize_sql_for_conditions(options[:scope])
         end
 
-        cachehash = CacheHash.new(model, options[:route_id])
+        if options[:time]
+          cachehash = CacheHash.new(model, options[:time])
+        else
+          cachehash = CacheHash.new(model, options[:route_id])
+        end
 
         cachehash.add(key, options)
 
@@ -43,12 +51,36 @@ module FlagpoleSitta
 
         model = get_model options[:model]
 
-        cachehash = CacheHash.new(model, options[:route_id])
+        if options[:time]
+          cachehash = CacheHash.new(model, options[:time])
+        else
+          cachehash = CacheHash.new(model, options[:route_id])
+        end
 
-        cachehash.destory
+        cachehash.destory(options)
 
       end
 
+      def destroy_time_caches time
+        time = [time.strftime('%Y').to_i,time.strftime('%m').to_i,time.strftime('%d').to_i,time.strftime('%H').to_i]
+        time_cur_string = ""
+        time.each do |t|
+          time_cur_string = time_cur_string + t.to_s
+          destroy_cache_hash(:time => time_cur_string)
+          time_cur_string = time_cur_string + '/'
+        end
+      end
+
+    end
+
+    def cs_time_col clazz = nil
+      clazz ||= self.class
+      self.try(:send, ("#{clazz.cs_time_col}"))
+    end
+
+    def cs_time_col_was clazz = nil
+      clazz ||= self.class
+      self.try(:send, ("#{clazz.cs_time_col}_was"))
     end
 
     def cache_sitta_save
@@ -73,14 +105,17 @@ module FlagpoleSitta
       while(cur_clazz.respond_to? :destroy_cache_hash)
 
         #AR - Clear all caches related to the old route_id
-        cur_clazz.destroy_cache_hash(:route_id => self.try(:send, ("#{cur_clazz.route_id}_was")).to_s)
-        #AR - Clear all caches related to the new route_id just in case
-        cur_clazz.destroy_cache_hash(:route_id => self.try(:send, ("#{cur_clazz.route_id}")).to_s)
-        #AR - If the new and old are the same All that will happen on the second call is that
-        #it will write the flag out and then destroy it. A very tiny bit of work
-        #for a great amount of extra protection.
+        cur_clazz.destroy_cache_hash(:route_id => self.route_id_was(cur_clazz).to_s)
 
-        # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
+        #AR - Clear all caches related to the old time col value
+        # Don't run if time is nil. It can't be index by time
+        # if time is nil anyway.
+        time_was = self.cs_time_col_was(cur_clazz)
+        if time_was
+          cur_clazz.destroy_time_caches(time_was)
+        end
+
+        # AR - Clear all index caches where old object state is in scope
         cur_clazz.destroy_cache_hash(:obj => self)
 
         cur_clazz = cur_clazz.superclass
@@ -93,16 +128,31 @@ module FlagpoleSitta
     #Sense the checking the scope requires the object to be in the database, this has to be called in case the new version that has been 
     #saved fits into any cache's scope. The above call to clear index caches is basically the object_was call, while this is just the call 
     #for the update object.
+    #Also in case they are using the updated_at as the time stamp time destroy must happen here.
     def post_cache_work
       original_clazz = self.class
       cur_clazz = original_clazz
 
       while(cur_clazz.respond_to? :destroy_cache_hash)
-        # AR - Remember to include models_in_index in your helper call in the corresponding index cache.
+        #AR - Clear all caches related to the new route_id
+        cur_clazz.destroy_cache_hash(:route_id => self.route_id(cur_clazz).to_s)
+
+        #AR - Clear all caches related to the new time col value
+        # Don't run if time is nil. It can't be index by time
+        # if time is nil anyway.
+        time = self.cs_time_col(cur_clazz)
+        if time
+          cur_clazz.destroy_time_caches(time)
+        end
+
+        # AR - Clear all index caches where new object state is in scope
         cur_clazz.destroy_cache_hash(:obj => self)
 
         cur_clazz = cur_clazz.superclass
       end
+
+      extra_cache_maintenance(true)
+
     end
 
     #AR - For Safety this will not recurse upwards for the extra cache maintenance

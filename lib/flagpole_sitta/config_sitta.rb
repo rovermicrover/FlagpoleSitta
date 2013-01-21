@@ -3,27 +3,40 @@ module FlagpoleSitta
 
     extend ActiveSupport::Concern
 
+    def route_id clazz = nil
+      clazz ||= self.class
+      self.try(:send, ("#{clazz.route_id}"))
+    end
+
+    def route_id_was clazz = nil
+      clazz ||= self.class
+      self.try(:send, ("#{clazz.route_id}_was"))
+    end
+
     module ClassMethods
 
       def route_id
-        @_route_id || (self.superclass.respond_to?(:route_id) ? self.superclass.route_id : nil)  || "id"
+        @_fs_route_id ||= (self.superclass.respond_to?(:route_id) ? self.superclass.route_id : "id")
       end
 
       def has_existence_hash options = {}
-        @_route_id ||= options[:route_id] ? options[:route_id].to_s : @_route_id
+        @_fs_route_id ||= options[:route_id]
+        @_eh_update_ehnum_after ||= options[:update_num_after]
+        @_eh_ehnum_col ||= options[:num_column]
         include FlagpoleSitta::ExistenceHash
       end
 
       def has_brackets_retrieval options = {}
-        @_safe_content = options[:safe_content] ? options[:safe_content] : @_safe_content
-        @_value_field = options[:value] ? options[:value].to_s : @_value_field
-        @_key_field = options[:key] ? options[:key].to_s : @_key_field
-        @_default_value = options[:default_value] ? options[:default_value] : @_default_value
+        @_br_safe_content ||= options[:safe_content]
+        @_br_value_field ||= options[:value]
+        @_br_key_field ||= options[:key]
+        @_br_default_value ||= options[:default_value]
         include FlagpoleSitta::BracketRetrieval
       end
 
       def cache_sitta options = {}
-        @_route_id = options[:route_id] ? options[:route_id].to_s : @_route_id
+        @_fs_route_id ||= options[:route_id]
+        @_cs_time_col ||= options[:time_column]
         include FlagpoleSitta::CacheSitta
       end
 

@@ -8,6 +8,10 @@ module FlagpoleSittaHelper
     model.try(:update_cache_hash, key, :route_id => route_id)
   end
 
+  def update_time_array_cache model, key, time
+    model.try(:update_cache_hash, key, :time => time)
+  end
+
   #In case an unsafe param gets passed. 
   #Don't want to save SQL injection attempts in the cache.
   def clean_options options={}
@@ -108,6 +112,14 @@ module FlagpoleSittaHelper
         main_model = options[:model]
       end
 
+    elsif options[:time_models]
+
+      if options[:time_models].class.eql?(Array)
+        main_model = options[:time_models][0]
+      else
+        main_model = options[:time_models]
+      end
+
     elsif options[:models_in_index]
 
       if options[:models_in_index].class.eql?(Array)
@@ -120,6 +132,12 @@ module FlagpoleSittaHelper
 
     main_model = main_model.respond_to?(:constantize) ? main_model.constantize : main_model
 
+    if options[:time]
+      time_string = (options[:time][:year] ? options[:time][:year].to_i.to_s : '') + (options[:time][:month] ? ('/' + options[:time][:month].to_i.to_s) : '') + (options[:time][:day] ? ('/' + options[:time][:day].to_i.to_s) : '') + (options[:time][:hour] ? ('/' + options[:time][:hour].to_i.to_s) : '')
+    else
+      time_string = nil
+    end
+
     action = options[:action] || params[:action]
 
     key = "views/#{main_model}/#{action}"
@@ -127,6 +145,8 @@ module FlagpoleSittaHelper
     key = key + (main_route_id ? ('/' + main_route_id) : '')
 
     key = key + (options[:sub_route_id] ? ('/' + options[:sub_route_id]) : '')
+
+    key = key + (time_string.present? ? ('/' + time_string) : '')
 
     key = key + (options[:section] ? ('/' + options[:section]) : '')
 
@@ -184,7 +204,15 @@ module FlagpoleSittaHelper
           associated << update_index_array_cache(processed_model, key, options[:scope])
         end
 
-        #AR - Create a link between each declared object and the cache.
+        if options[:time_models] && options[:time]
+          if options[:time_models].class.eql?(Array)
+            options[:time_models].each do |m|
+              associated << update_time_array_cache(m, key, time_string)
+            end
+          else
+            associated << update_time_array_cache(options[:time_models], key, time_string)
+          end
+        end
 
         if !options[:index_only] && options[:route_id]
           if options[:route_id].class.eql?(Array) && options[:model].class.eql?(Array)
