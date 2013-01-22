@@ -94,6 +94,13 @@ module FlagpoleSittaHelper
   #The 'scope' can only be arguments for a where call. Which means it will either be a hash or an array.
   #Scopes should be used sparling because in order to verify them on save they require a call to the database, 
   #and while it boils down to a call by id, they can still add up if you don't pay attention.
+  #
+  #:time_models which allows you to use cache sitta more efficently with indexes based on time. Pass it the models
+  #which you are index on a time field.
+  #
+  #:time pass it through a hash the :year, :month, :day, and :hour your indexing on. You can choose to index on any of these
+  #but if you index on hour you must provide :day, :month, :year also. If you index on day, you must provide :month: year also.
+  #etc etc.
   def cache_sitta  options={}, &block
 
     options = clean_options(options)
