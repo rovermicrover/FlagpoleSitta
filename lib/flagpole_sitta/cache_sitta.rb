@@ -184,11 +184,7 @@ module FlagpoleSitta
         end
         assoc_objs = assoc_objs.compact
 
-        puts a
-        puts assoc_objs
-
         assoc_objs.each do |ao|
-          puts ao
           ao.cache_work(before)
         end
       end

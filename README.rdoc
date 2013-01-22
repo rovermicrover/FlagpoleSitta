@@ -23,7 +23,7 @@ http://www.harveydanger.com/contribute.php
 
 My grammar ability's are fail. So if something doesn't make sense in the docs don't be afraid to point it out and/or submit a patch. Because to me it all looks right.....
 
-From version 2 onward Redis Caching is required because of the use of Redis Objects.
+From version 2 onward Redis Caching is required because of the use of Redis Objects. This should make the gem faster, and more efficient, not to mention condense the code, and allow for more features to be add more easily.
 
 == Inspiration
 
@@ -157,6 +157,29 @@ You could also pass it :scope which will add a 'scope' to a :models_in_index cac
 The 'scope' can only be arguments for a where call. Which means it will either be a hash, record object, string, or an array.
 
 Scopes should be used sparling because in order to verify them on save they require a call to the database, and while it boils down to a call by id, they can still add up if you don't pay attention.
+
+You can also tell it to watch associated objects and clear their caches on update too, by declaring on model something like the following.
+
+=== Model
+  cache_sitta :watch_assoc => [:jobs, :master]
+
+This method though is not very efficient for large numbers of associated objects (Ie association that would be larger then available memory). It should be better in the next few versions though (This was written at V2.0.0). It needs to be set up to update in batch instead of all at once.
+
+You also have the option if you index based on date to do the following.
+
+=== Model
+  cache_sitta :time_column => "published_at"
+
+=== View
+  - cache_sitta :section => "body", :index_only => true , :time_models => Blog, :time => {:year => @year, :month => @month} do
+    - render :partial => "blogs/index/body"
+
+:time_column of course being the column you base the time indexing on.
+
+You can also pass the helper method :day and :hour to time. If you pass it hour you must pass it day, month year. If you pass it day you must pass it day and year. Etc etc. These can either be a string or a number. In the future it will be possible to just do :time => @datetime.
+
+This works because index based on time have stable, not relative boundaries. This means you will have far fewer cache invalidations on update.
+
 
 == existence_hash
 
