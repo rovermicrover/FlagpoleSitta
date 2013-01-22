@@ -61,7 +61,7 @@ Then bundle install.
 
 == cache_sitta
 
-Flagpole Sitta is a gem thats main purpose is to make it easier to effectively fragment cache in dynamic fashions in Rails.
+Flagpole Sitta is a gem thats main purpose is to make it easier to effectively fragment cache in dynamic fashions in Rails. You can even use it in a Russian Doll caching system. Guide coming later.
 
 When ever a cache is created it is associated with any model and/or record you tell it to be from the view helper method. When that model and/or record is updated all it's associated caches are cleared. 
 
