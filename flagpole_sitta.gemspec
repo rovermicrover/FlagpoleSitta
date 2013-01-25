@@ -19,5 +19,7 @@ Gem::Specification.new do |s|
   s.add_dependency('redis')
   s.add_dependency('redis-rails')
   s.add_dependency('redis-objects')
+  s.add_dependency('redis-classy')
+  s.add_dependency('redis-mutex')
 
 end

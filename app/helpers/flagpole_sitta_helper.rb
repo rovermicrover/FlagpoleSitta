@@ -1,45 +1,5 @@
 module FlagpoleSittaHelper
 
-  def update_index_array_cache model, key, scope=nil
-    model.try(:update_cache_hash, key, :scope => scope)
-  end
-
-  def update_show_array_cache model, key, route_id
-    model.try(:update_cache_hash, key, :route_id => route_id)
-  end
-
-  def update_time_array_cache model, key, time
-    model.try(:update_cache_hash, key, :time => time)
-  end
-
-  #In case an unsafe param gets passed. 
-  #Don't want to save SQL injection attempts in the cache.
-  def clean_options options={}
-
-    result = Hash.new
-
-    options.each do |k,v|
-      #First make sure they aren't trying to put some nasty html in.
-      begin
-        clean_v = sanitize(v)
-      rescue
-        clean_v = v
-      end
-
-      #Scopes are then sanitized before they are placed in via the methods on the model
-
-      #Next try to make sure they aren't trying to inject anything via a dynamic scope
-
-
-
-      result[k] = clean_v
-
-    end
-
-    result
-
-  end
-
   ##
   #AR - cache_sitta helper
   #NOTE This is not safe for .builder xml files.
@@ -95,7 +55,7 @@ module FlagpoleSittaHelper
   #Scopes should be used sparling because in order to verify them on save they require a call to the database, 
   #and while it boils down to a call by id, they can still add up if you don't pay attention.
   #
-  #:time_models which allows you to use cache sitta more efficently with indexes based on time. Pass it the models
+  #:times which allows you to use cache sitta more efficently with indexes based on time. Pass it the models
   #which you are index on a time field.
   #
   #:time pass it through a hash the :year, :month, :day, and :hour your indexing on. You can choose to index on any of these
@@ -103,62 +63,16 @@ module FlagpoleSittaHelper
   #etc etc.
   def cache_sitta  options={}, &block
 
-    options = clean_options(options)
+    controller = options[:controller] || params[:controller]
+    action = options[:action] ? options[:action].first[0] :  params[:action]
+    action_vars = options[:action] ? options[:action].first[1] :  options[:action_vars]
 
-    if options[:route_id].class.eql?(Array)
-      main_route_id = options[:route_id][0]
-    else
-      main_route_id = options[:route_id]
-    end
+    key = "views/#{controller}/#{action}/#{action_vars}/#{options[:section]}"
 
-    if options[:model]
-
-      if options[:model].class.eql?(Array)
-        main_model = options[:model][0]
-      else
-        main_model = options[:model]
-      end
-
-    elsif options[:time_models]
-
-      if options[:time_models].class.eql?(Array)
-        main_model = options[:time_models][0]
-      else
-        main_model = options[:time_models]
-      end
-
-    elsif options[:models_in_index]
-
-      if options[:models_in_index].class.eql?(Array)
-        main_model = options[:models_in_index][0]
-      else
-        main_model = options[:models_in_index]
-      end
-      
-    end
-
-    main_model = main_model.respond_to?(:constantize) ? main_model.constantize : main_model
-
-    if options[:time]
-      time_string = (options[:time][:year] ? options[:time][:year].to_i.to_s : '') + (options[:time][:month] ? ('/' + options[:time][:month].to_i.to_s) : '') + (options[:time][:day] ? ('/' + options[:time][:day].to_i.to_s) : '') + (options[:time][:hour] ? ('/' + options[:time][:hour].to_i.to_s) : '')
-    else
-      time_string = nil
-    end
-
-    action = options[:action] || params[:action]
-
-    key = "views/#{main_model}/#{action}"
-
-    key = key + (main_route_id ? ('/' + main_route_id) : '')
-
-    key = key + (options[:sub_route_id] ? ('/' + options[:sub_route_id]) : '')
-
-    key = key + (time_string.present? ? ('/' + time_string) : '')
-
-    key = key + (options[:section] ? ('/' + options[:section]) : '')
+    key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
 
     calls = instance_variable_get(
-      "@" + (options[:section] ? options[:section] : 'body') + "_calls"
+      "@" + options[:section] + "_calls"
     )
 
     hash = benchmark("Read fragment #{key} :: FlagpoleSitta") do
@@ -168,72 +82,60 @@ module FlagpoleSittaHelper
     if hash
       content = hash[:content]
     else
-      content = benchmark("Write fragment #{key} :: FlagpoleSitta") do
-        #NOTE This is not safe for .builder xml files, and using capture here is why.
-        #Its either this or a really complicated hack, from the rails source code, which
-        #at the moment I don't feel comfortable using. Waiting for an official solution for
-        #the ability to use capture with .builders.
-        content = capture do
+      Redis::Mutex.with_lock(key + "/lock") do
 
-          if calls
-            calls.each do |c|
-              if instance_variable_get("@#{c[0]}").nil?
-                instance_variable_set("@#{c[0]}", c[1].call())
+        hash = benchmark("Lock Acquired Reading fragment #{key} :: FlagpoleSitta") do
+          hash = FlagpoleSitta::CommonFs.flagpole_cache_read(key)
+        end
+
+        if not hash
+
+          content = benchmark("Write fragment #{key} :: FlagpoleSitta") do
+            #NOTE This is not safe for .builder xml files, and using capture here is why.
+            #Its either this or a really complicated hack, from the rails source code, which
+            #at the moment I don't feel comfortable using. Waiting for an official solution for
+            #the ability to use capture with .builders.
+            content = capture do
+
+              if calls
+                calls.each do |c|
+                  if instance_variable_get("@#{c[0]}").nil?
+                    instance_variable_set("@#{c[0]}", c[1].call())
+                  end
+                end
               end
+
+              yield
+
             end
+
+            #AR - If the cache is an index or includes an index
+            #then models_in_index should be passed with all the
+            #models that could show up in the index.
+            #Then on save of any model include here this index will be cleared.
+            #This can also be used for fragments where there are just so many objects,
+            #that while its not an index, there isn't a clear way expect to nuke it when
+            #any of the model types involved are updated.
+
+            associated = Array.new
+
+            if options[:index]
+              cache_sitta_associations :index, associated, key, options[:index]
+            elsif options[:times]
+              cache_sitta_associations :times, associated, key, options[:times]
+            elsif options[:objects]
+              cache_sitta_associations :objects, associated, key, options[:objects]
+            end
+
+            FlagpoleSitta::CommonFs.flagpole_cache_write(key, {:content => content, :associated => associated})
+
+            content
+
           end
 
-          yield
-
+        else
+          content = hash[:content]
         end
-
-        #AR - If the cache is an index or includes an index
-        #then models_in_index should be passed with all the
-        #models that could show up in the index.
-        #Then on save of any model include here this index will be cleared.
-        #This can also be used for fragments where there are just so many objects,
-        #that while its not an index, there isn't a clear way expect to nuke it when
-        #any of the model types involved are updated.
-
-        associated = Array.new
-
-        if options[:models_in_index].class.eql?(Array)
-          options[:models_in_index].each_index do |i|
-            m = options[:models_in_index][i]
-            if options[:scope]
-              scope = options[:scope][i]
-            end
-            processed_model = m.respond_to?(:constantize) ? m.constantize : m
-            associated << update_index_array_cache(processed_model, key, scope)
-          end
-        elsif options[:models_in_index]
-          processed_model = options[:models_in_index].respond_to?(:constantize) ? options[:models_in_index].constantize : options[:models_in_index]
-          associated << update_index_array_cache(processed_model, key, options[:scope])
-        end
-
-        if options[:time_models] && options[:time]
-          if options[:time_models].class.eql?(Array)
-            options[:time_models].each do |m|
-              associated << update_time_array_cache(m, key, time_string)
-            end
-          else
-            associated << update_time_array_cache(options[:time_models], key, time_string)
-          end
-        end
-
-        if !options[:index_only] && options[:route_id]
-          if options[:route_id].class.eql?(Array) && options[:model].class.eql?(Array)
-            options[:model].each_index do |i|
-              associated << update_show_array_cache(options[:model][i], key, options[:route_id][i])
-            end
-          else
-            associated << update_show_array_cache(main_model, key, main_route_id)
-          end
-        end
-
-        FlagpoleSitta::CommonFs.flagpole_cache_write(key, {:content => content, :associated => associated})
-
-        content
 
       end
 
@@ -241,6 +143,60 @@ module FlagpoleSittaHelper
 
     safe_concat content
 
+  end
+
+  private
+
+  def update_index_array_cache model, key
+    model.try(:update_cache_hash, key)
+  end
+
+  def update_time_array_cache model, key, time
+    model.try(:update_cache_hash, key, :time => time)
+  end
+
+  def update_object_array_cache model, key, route_id
+    model.try(:update_cache_hash, key, :route_id => route_id)
+  end
+
+  def cache_sitta_associations type, associated, key, options
+    if options
+      options.each do |model, hash|
+        if type == :index
+          associated << update_index_array_cache(model, key)
+        elsif type == :times
+          time_string = (hash[:year] ? hash[:year].to_i.to_s : '') + (hash[:month] ? ('/' + hash[:month].to_i.to_s) : '') + (hash[:day] ? ('/' + hash[:day].to_i.to_s) : '') + (hash[:hour] ? ('/' + hash[:hour].to_i.to_s) : '')
+          associated << update_time_array_cache(model, key, time_string)
+        elsif type == :objects
+          route_id = hash[:route_id]
+          associated << update_object_array_cache(model, key, route_id)
+        end
+        if hash && hash[:assoc] && hash[:location]
+
+          objects = instance_variable_get(hash[:location])
+          objects = objects.respond_to?(:each) ? objects : ([] << objects)
+
+          objects.each do |o|
+
+            assoc = hash[:assoc].respond_to?(:each) ? hash[:assoc] : ([] << hash[:assoc])
+            assoc.each do |a, scope|
+
+              if o.class.reflect_on_association(a).collection?
+                assoc_objs = o.send(a).where(scope)
+              else
+                assoc_objs = o.send(a)
+              end
+              if assoc_objs.present?
+                assoc_objs = assoc_objs.respond_to?(:each) ? assoc_objs : ([] << assoc_objs)
+                assoc_objs.each do |ao|
+                  associated << update_object_array_cache(model, key, ao.route_id)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
   end
 
 end

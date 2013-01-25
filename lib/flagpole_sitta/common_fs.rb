@@ -13,19 +13,19 @@ module FlagpoleSitta
       end
 
       def flagpole_cache_read key
-        Rails.cache.read(app_hash_namespace + key.to_s)
+        Rails.cache.read(key.to_s)
       end
 
       def flagpole_cache_write key, value
-        Rails.cache.write(app_hash_namespace + key.to_s, value)
+        Rails.cache.write(key.to_s, value)
       end
 
       def flagpole_cache_delete key
-        Rails.cache.delete(app_hash_namespace + key.to_s)
+        Rails.cache.delete(key.to_s)
       end
 
       def flagpole_cache_exist? key
-        Rails.cache.exist?(app_hash_namespace + key.to_s)
+        Rails.cache.exist?(key.to_s)
       end
 
     end

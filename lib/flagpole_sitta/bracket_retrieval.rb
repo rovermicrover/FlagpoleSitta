@@ -6,32 +6,37 @@ module FlagpoleSitta
     extend ActiveSupport::Concern
 
     included do
-      validates_uniqueness_of (@_key_field || "key").to_sym
-      validates_presence_of (@_key_field || "key").to_sym
-      before_save :br_update_save
-      before_destroy :br_update_destroy
-    end
-
-    def br_update_save
-      self.br_update(true)
-    end
-
-    def br_update_destroy
-      self.br_update(false)
+      validates_uniqueness_of (@_br_key_field || "key").to_sym
+      validates_presence_of (@_br_key_field || "key").to_sym
+      before_save :fs_get_state
+      before_destroy :fs_get_state
+      after_commit :br_update
     end
 
     #After update destroy old cache and write new one.
-    def br_update alive
 
-      self.class.initialize_bracket_retrieval_hash
+    def br_update_save
+      @_br_alive = true
+      fs_get_state
+    end
 
-      key = self.class.key_field + "_was"
+    def br_update_destory
+      @_br_alive = false
+      fs_get_state
+    end
 
-      bracket_retrieval_hash = self.class.instance_variable_get(:@bracket_retrieval_hash)
+    def br_update
 
-      bracket_retrieval_hash.delete(key)
+      old_key = @_fs_old_state ? @_fs_old_state.send(@_fs_old_state.class.key_field.to_s + "_was") : nil
 
-      if alive
+      if old_key
+        @_fs_old_state.class.initialize_bracket_retrieval_hash
+        bracket_retrieval_hash = @_fs_old_state.class.instance_variable_get(:@bracket_retrieval_hash)
+        bracket_retrieval_hash.delete(old_key)
+      end
+
+      if @_br_alive
+        self.class.initialize_bracket_retrieval_hash
         key = self.send(self.class.key_field)
         value = self.send(self.class.value_field)
         bracket_retrieval_hash[key] = value
@@ -41,7 +46,7 @@ module FlagpoleSitta
 
     module ClassMethods
 
-      def clazz
+      def klass
 
         self
 
@@ -57,7 +62,9 @@ module FlagpoleSitta
 
       def get_br_key
 
-        "#{clazz}/BracketRetrieval"
+        key = "#{klass}/BracketRetrieval"
+
+        key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
 
       end
 
@@ -72,12 +79,12 @@ module FlagpoleSitta
 
       #Will look up the object chain till it finds what it was set to, or not set too.
       def key_field
-        @_br_key_field ||= (self.superclass.respond_to?(:key_field) ? self.superclass.key_field : "name")
+        @_br_key_field ||= (self.superclass.respond_to?(:key_field) ? self.superclass.key_field : :name)
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too.
       def value_field
-        @_br_value_field ||= (self.superclass.respond_to?(:value_field) ? self.superclass.value_field : "content")
+        @_br_value_field ||= (self.superclass.respond_to?(:value_field) ? self.superclass.value_field : :content)
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too. 

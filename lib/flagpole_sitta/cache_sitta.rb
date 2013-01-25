@@ -9,13 +9,9 @@ module FlagpoleSitta
     extend ActiveSupport::Concern
 
     included do
-      before_save :cache_sitta_before_update
-      after_save :cache_sitta_after_update
-      before_destroy :cache_sitta_before_update
-
-      before_save :cache_sitta_before_update_assoc
-      after_save :cache_sitta_after_update_assoc
-      before_destroy :cache_sitta_before_update_assoc
+      before_save :fs_get_state
+      before_destroy :fs_get_state
+      after_commit :cache_work
     end
 
     module ClassMethods
@@ -25,7 +21,10 @@ module FlagpoleSitta
       end
 
       def cs_watch_assoc
-        @_cs_watch_assoc ||= (self.superclass.respond_to?(:cs_watch_assoc) ? self.superclass.cs_watch_assoc : nil)
+        @_cs_watch_assoc ||= (self.superclass.respond_to?(:cs_watch_assoc) ? self.superclass.cs_watch_assoc : [])
+        if !(@_cs_watch_assoc.class.eql?(Array))
+          @_cs_watch_assoc = [] << @_cs_watch_assoc
+        end
       end
 
       def get_model model
@@ -37,12 +36,6 @@ module FlagpoleSitta
       def update_cache_hash key, options={}
 
         model = get_model options[:model]
-
-        #Don't want to save SQL injection attempts into Redis.
-        #Kill them upfront just in case.
-        if options[:scope]
-          options[:scope] = sanitize_sql_for_conditions(options[:scope])
-        end
 
         if options[:time]
           cachehash = CacheHash.new(model, options[:time])
@@ -69,126 +62,160 @@ module FlagpoleSitta
 
       end
 
-      def destroy_time_caches time
-        time = [time.strftime('%Y').to_i,time.strftime('%m').to_i,time.strftime('%d').to_i,time.strftime('%H').to_i]
-        time_cur_string = ""
-        time.each do |t|
-          time_cur_string = time_cur_string + t.to_s
-          destroy_cache_hash(:time => time_cur_string)
-          time_cur_string = time_cur_string + '/'
+      def destory_object_cache route_id_was, route_id_cur
+        if route_id_was
+          destroy_cache_hash(:route_id => route_id_was)
+        end
+        if !route_id_was.eql?(route_id_cur)
+          destroy_cache_hash(:route_id => route_id_cur)
         end
       end
 
+      def destroy_time_caches time_was, time_cur
+
+        time_was = fs_time_parse time_was
+        time_cur = fs_time_parse time_cur
+
+        time_was_string = ""
+        time_cur_string = ""
+
+        time_was.each_index do |i|
+
+          time_was_string = time_was_string + time_was[i].to_s
+          time_cur_string = time_cur_string + time_cur[i].to_s
+          if time_was_string
+            destroy_cache_hash(:time => time_was_string)
+          end
+          if !time_was_string.eql?(time_cur_string)
+            destroy_cache_hash(:time => time_cur_string)
+          end
+
+          time_was_string = time_was_string + '/'
+          time_cur_string = time_cur_string + '/'
+
+        end
+
+      end
+
+      def fs_time_parse time 
+        time = [time.strftime('%Y').to_i,time.strftime('%m').to_i,time.strftime('%d').to_i,time.strftime('%H').to_i]
+      end
+
     end
 
-    def cs_time_col clazz = nil
-      clazz ||= self.class
-      self.try(:send, ("#{clazz.cs_time_col}"))
+    def cs_time_col klass = nil
+      klass ||= self.class
+      self.try(:send, ("#{klass.cs_time_col}"))
     end
 
-    def cs_time_col_was clazz = nil
-      clazz ||= self.class
-      self.try(:send, ("#{clazz.cs_time_col}_was"))
-    end
-
-    def cache_sitta_before_update
-      self.cache_work true
-    end
-
-    def cache_sitta_after_update
-      self.cache_work false
+    def cs_time_col_was klass = nil
+      klass ||= self.class
+      self.try(:send, ("#{klass.cs_time_col}_was"))
     end
 
     #Updates the cache after update of any cache sittaed item.
-    def cache_work before
-      original_clazz = self.class
+    def cache_work assoc_already_visited={}
+      original_klass_was = @_fs_old_state.class
+      original_klass_cur = self.destroyed? ? nil.class : self.class
       #Have to go through all possibilities so have
       #to go down and up the chain of inheritance here.
+      klass_hash = {}
 
-      #Go down the chain of inheritance
-      decedents = original_clazz.descendants
-      cache_work_descedants before, decedents
+      fs_get_all_klasses original_klass_cur, klass_hash
+      fs_get_all_klasses original_klass_was, klass_hash
 
-      cur_clazz = original_clazz
+      klass_hash.each do |name, klass|
 
+        cache_work_real_work klass, assoc_already_visited
+
+      end
+
+      @old_state = nil
+
+    end
+
+    def fs_get_all_klasses klass, klass_hash
+      cur_klass = klass
       #Now go up the chain of inheritance till you hit Active::Record Base
-      while(cur_clazz.respond_to? :destroy_cache_hash)
+      while(cur_klass.respond_to? :destroy_cache_hash)
 
-        cache_work_real_work before, cur_clazz
+        klass_hash[cur_klass.to_s] = cur_klass
 
-        cur_clazz = cur_clazz.superclass
+        cur_klass = cur_klass.superclass
 
       end
-
     end
 
-    def cache_work_descedants before, decedents
+    def cache_work_real_work klass, assoc_already_visited={}
+      new_state = self.destroyed? ? nil : self
+      old_state = @_fs_old_state
 
-      decedents.each do |d|
-        cache_work_descedants before, d.descendants
-        cache_work_real_work before, d
-      end
-
-    end
-
-    def cache_work_real_work before, clazz
-      if before
-        ending = "_was"
+      if old_state
+        time_was = old_state.send("cs_time_col_was", klass)
+        route_id_was = old_state.send("route_id",klass).to_s
       else
-        ending = ""
+        time_was = nil
+        route_id_was = nil
       end
+
+      if new_state
+        route_id_cur = new_state.send("route_id",klass).to_s
+        time_cur = new_state.send("cs_time_col", klass)
+      else
+        time_cur = nil
+        route_id_cur = nil
+      end
+
       #AR - Clear all caches related to the old or new route_id
-      clazz.destroy_cache_hash(:route_id => self.send("route_id#{ending}",clazz).to_s)
+
+      klass.destory_object_cache(route_id_was, route_id_cur)
 
       #AR - Clear all caches related to the old or new time col value
       # Don't run if time is nil. It can't be index by time
       # if time is nil anyway.
-      time = self.send("cs_time_col#{ending}", clazz)
-      if time
-        clazz.destroy_time_caches(time)
+      if time_cur && time_was
+        klass.destroy_time_caches(time_was, time_cur)
       end
 
-      # AR - Clear all index caches where old object state is in scope
-      clazz.destroy_cache_hash(:obj => self)
+      # AR - Clear all index caches
+      klass.destroy_cache_hash()
+
+      if klass.cs_watch_assoc
+        cache_sitta_assoc_update(:belongs_to, klass, new_state, old_state, assoc_already_visited)
+        cache_sitta_assoc_update(:has_one, klass, new_state, old_state, assoc_already_visited)
+      end
+
     end
 
-    def cache_sitta_before_update_assoc
-      if assoc = self.class.cs_watch_assoc
-        cache_work_assoc(assoc, true)
-      end
-    end
+    def cache_sitta_assoc_update association, klass, new_state, old_state, assoc_already_visited={}
+      klass.reflect_on_all_associations(association).each do |a|
+        if klass.cs_watch_assoc.include?(a.name)
 
-    def cache_sitta_after_update_assoc
-      if assoc = self.class.cs_watch_assoc
-        cache_work_assoc(assoc, false)
-      end
-    end
+          cache_sitta_assoc_obj_update old_state, a.name, assoc_already_visited
+          cache_sitta_assoc_obj_update new_state, a.name, assoc_already_visited
 
-    def cache_work_assoc assoc, before
-      if before
-        state = self.class.find(self.id)
-      else
-        state = self
-      end
-
-      if !assoc.class.eql?(Array)
-        assoc = [] << assoc
-      end
-      assoc = assoc.compact
-
-      assoc.each do |a|
-        assoc_objs = state.send(a)
-
-        if !assoc_objs.class.eql?(Array)
-          assoc_objs = [] << assoc_objs
-        end
-        assoc_objs = assoc_objs.compact
-
-        assoc_objs.each do |ao|
-          ao.cache_work(before)
         end
       end
+    end
 
+    def cache_sitta_assoc_obj_update state, assoc_name, assoc_already_visited={}
+      if state
+        begin
+          assoc_obj = state.send(assoc_name)
+        rescue
+          assoc_obj = nil
+        end
+
+        if assoc_obj && !(assoc_already_visited[assoc_obj])
+          assoc_already_visited[assoc_obj] = true
+          assoc_obj.cache_work assoc_already_visited
+        end
+      end
+    end
+
+    def cache_sitta_assoc_watch object
+      self.cache_work
+      object.cache_work
     end
 
   end

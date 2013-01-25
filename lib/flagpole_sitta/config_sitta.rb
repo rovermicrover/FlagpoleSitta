@@ -3,14 +3,23 @@ module FlagpoleSitta
 
     extend ActiveSupport::Concern
 
-    def route_id clazz = nil
-      clazz ||= self.class
-      self.try(:send, ("#{clazz.route_id}"))
+    def route_id klass = nil
+      klass ||= self.class
+      self.try(:send, ("#{klass.route_id}"))
     end
 
-    def route_id_was clazz = nil
-      clazz ||= self.class
-      self.try(:send, ("#{clazz.route_id}_was"))
+    def route_id_was klass = nil
+      klass ||= self.class
+      self.try(:send, ("#{klass.route_id}_was"))
+    end
+
+    def fs_get_state
+      if self.new_record?
+        @_fs_old_state = nil
+      else
+        incl = self.class.respond_to?(cs_watch_assoc) ? self.class.cs_watch_assoc : nil
+        @_fs_old_state = self.class.includes(incl).find(self.id)
+      end
     end
 
     module ClassMethods

@@ -6,8 +6,9 @@ module FlagpoleSitta
     extend ActiveSupport::Concern
 
     included do
-      before_save :existence_hash_save_update
-      before_destroy :existence_hash_destory_update
+      before_save :eh_update_save
+      before_destroy :eh_update_destory
+      after_commit :update_existence_hash
     end
 
     module ClassMethods
@@ -23,7 +24,7 @@ module FlagpoleSitta
        #Options :emptystack will make it generate a key for the emptystack instead of the general cache array.
       def eh_key_gen
 
-        key = "#{@superclazz}/ExistenceHash"
+        key = "#{@superklass}/ExistenceHash"
 
         key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
 
@@ -31,7 +32,7 @@ module FlagpoleSitta
 
       def ch_key_gen
 
-        key = "#{@superclazz}/CounterHash"
+        key = "#{@superklass}/CounterHash"
 
         key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
 
@@ -39,17 +40,19 @@ module FlagpoleSitta
 
       def ex_ch_init_check_key_gen
 
-        key = "#{@superclazz}/InitCheck"
+        key = "#{@superklass}/InitCheck"
 
         key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
 
       end
 
       def existance_hash
+        initialize_c_a_hashes
         @existance_hash
       end
 
       def counter_hash
+        initialize_c_a_hashes
         @counter_hash
       end
 
@@ -70,7 +73,7 @@ module FlagpoleSitta
 
           if @counter_hash.empty? || @existance_hash.empty?
 
-            @superclazz.find_each do |m|
+            @superklass.find_each do |m|
               @counter_hash[m.send(m.class.route_id)] = m.has_attribute?(ehnum_col) ? (m.send(ehnum_col).to_i || 0) : 0
               @existance_hash[m.send(m.class.route_id)] = m.class
             end
@@ -122,9 +125,9 @@ module FlagpoleSitta
 
         @existance_hash.each do |key, type|
 
-          if type.present? && type.eql?(clazz)
+          if type.present? && type.eql?(self)
             cur = get_existence_hash key
-            yield cur
+            yield key, cur
           end
 
         end
@@ -136,7 +139,7 @@ module FlagpoleSitta
       #Gets its original super class.
       def get_super_with_existence_hash
 
-        if @superclazz.nil?
+        if @superklass.nil?
 
           c = self
           #Get the original super class that declares the existence hash
@@ -145,70 +148,74 @@ module FlagpoleSitta
             c = c.superclass
           end
 
-          @superclazz = c
+          @superklass = c
 
         end
 
-        @superclazz
+        @superklass
 
       end
 
     end
 
-    def existence_hash_save_update
-      self.update_existence_hash(true)
+    def eh_update_save
+      @_eh_alive = true
+      fs_get_state
     end
 
-    def existence_hash_destory_update
-      self.update_existence_hash(false)
+    def eh_update_destory
+      @_eh_alive = false
+      fs_get_state
     end
 
     #Updates the 'hash' on save of any of its records.
-    def update_existence_hash alive
-      self.class.initialize_c_a_hashes
+    def update_existence_hash
+      self_was = @_fs_old_state
+      self_cur = self
+
       #Get the Current Class and the Old Class in case the object changed classes.
-      #If its the base object, ie type is nil, then return class as the old_clazz.
+      #If its the base object, ie type is nil, then return class as the old_klass.
       #If the object doesn't have the type field assume it can't change classes.
-      new_clazz = self.has_attribute?('type') ? (self.type || self.class) : self.class
-      old_clazz = self.has_attribute?('type') ? (self.type_was || self.class) : self.class
-
-      if new_clazz.class.eql?(String)
-        new_clazz = new_clazz.constantize
+      if self_was
+        old_klass = self_was.has_attribute?('type') ? (self_was.type_was || self_was.class) : self_was.class
+        if old_klass.class.eql?(String)
+          old_klass = old_klass.constantize
+        end
+        old_klass.initialize_c_a_hashes
+        old_key = self_was.send("#{old_klass.route_id}_was")
       end
 
-      if old_clazz.class.eql?(String)
-        old_clazz = old_clazz.constantize
+      if @_eh_alive
+        new_klass = self_cur.has_attribute?('type') ? (self_cur.type || self_cur.class) : self_cur.class
+        if new_klass.class.eql?(String)
+          new_klass = new_klass.constantize
+        end
+        new_klass.initialize_c_a_hashes
+        new_key = self_cur.send("#{new_klass.route_id}")
       end
-
-      #Old key is where it was, and new is where it is going.
-      new_key = self.send("#{new_clazz.route_id}")
-      old_key = self.send("#{old_clazz.route_id}_was")
       
       #If its a new record and its alive add it to the 'hash'
-      if self.new_record? && alive
+      if self_was.nil? && @_eh_alive
 
-        self.class.existance_hash[new_key] = self.class
-        self.class.counter_hash[new_key] = 0
+        new_klass.existance_hash[new_key] = self_cur.class
+        new_klass.counter_hash[new_key] = 0
 
       #Else move forward unless its a new record that is not alive
-      elsif !self.new_record?
+      elsif self_was
 
         #If the record is dying just remove it
-        if !alive
-          self.class.existance_hash.delete(old_key)
-          self.class.counter_hash.delete(old_key)
+        if !@_eh_alive
+          old_klass.existance_hash.delete(old_key)
+          old_klass.counter_hash.delete(old_key)
         #Else If everything has changed nil out the old keys
         #and place info in new keys.
-        elsif !new_key.eql?(old_key)
-          self.class.existance_hash.delete(old_key)
-          num = self.class.counter_hash[old_key]
-          self.class.counter_hash.delete(old_key)
+        elsif !new_key.eql?(old_key) || !new_klass.eql?(old_klass)
+          old_klass.existance_hash.delete(old_key)
+          num = old_klass.counter_hash[old_key]
+          old_klass.counter_hash.delete(old_key)
 
-          self.class.existance_hash[new_key] = new_clazz
-          self.class.counter_hash[new_key] = num
-        #Else if the keys are the same but the class is different update the class.
-        elsif !new_clazz.eql?(old_clazz)
-          self.class.existance_hash[old_key] = new_clazz
+          new_klass.existance_hash[new_key] = new_klass
+          new_klass.counter_hash[new_key] = num
         end
 
       end
