@@ -14,6 +14,9 @@ The rottenness and evil in me.
 
 ===This gem should be considered in beta.
 
+== NOTE
+These docks are for the old version of the gem. When the new version is realesed will udpate the docs. This gem has gone through a major overhaul to get ready for rails 4.
+
 ===Before You Use read This.
 https://github.com/rovermicrover/FlagpoleSitta/wiki/Before-You-Use-Read-This
 
