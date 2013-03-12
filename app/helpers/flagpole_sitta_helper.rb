@@ -145,8 +145,6 @@ module FlagpoleSittaHelper
 
   end
 
-  private
-
   def update_index_array_cache model, key
     model.try(:update_cache_hash, key)
   end
@@ -189,7 +187,7 @@ module FlagpoleSittaHelper
               if assoc_objs.present?
                 assoc_objs = assoc_objs.respond_to?(:each) ? assoc_objs : ([] << assoc_objs)
                 assoc_objs.each do |ao|
-                  associated << update_object_array_cache(model, key, ao.route_id)
+                  associated << update_object_array_cache(ao.class, key, ao.route_id)
                 end
               end
             end

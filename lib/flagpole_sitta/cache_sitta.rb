@@ -9,8 +9,8 @@ module FlagpoleSitta
     extend ActiveSupport::Concern
 
     included do
-      before_save :fs_get_state
-      before_destroy :fs_get_state
+      before_save :cs_get_state
+      before_destroy :cs_get_state
       after_commit :cache_work
     end
 
@@ -21,10 +21,16 @@ module FlagpoleSitta
       end
 
       def cs_watch_assoc
-        @_cs_watch_assoc ||= (self.superclass.respond_to?(:cs_watch_assoc) ? self.superclass.cs_watch_assoc : [])
-        if !(@_cs_watch_assoc.class.eql?(Array))
-          @_cs_watch_assoc = [] << @_cs_watch_assoc
+        if @_cs_watch_assoc.nil?
+          cs_watch_assoc = (self.superclass.respond_to?(:cs_watch_assoc) ? self.superclass.cs_watch_assoc : [])
+          if !(cs_watch_assoc.class.eql?(Array))
+            @_cs_watch_assoc = [] << cs_watch_assoc
+          else
+            @_cs_watch_assoc = cs_watch_assoc
+          end
         end
+
+        @_cs_watch_assoc
       end
 
       def get_model model
@@ -66,38 +72,43 @@ module FlagpoleSitta
         if route_id_was
           destroy_cache_hash(:route_id => route_id_was)
         end
-        if !route_id_was.eql?(route_id_cur)
+        if route_id_cur && !route_id_was.eql?(route_id_cur)
           destroy_cache_hash(:route_id => route_id_cur)
         end
       end
 
       def destroy_time_caches time_was, time_cur
 
-        time_was = fs_time_parse time_was
-        time_cur = fs_time_parse time_cur
+        time_strings_hash = {}
 
-        time_was_string = ""
-        time_cur_string = ""
-
-        time_was.each_index do |i|
-
-          time_was_string = time_was_string + time_was[i].to_s
-          time_cur_string = time_cur_string + time_cur[i].to_s
-          if time_was_string
-            destroy_cache_hash(:time => time_was_string)
-          end
-          if !time_was_string.eql?(time_cur_string)
-            destroy_cache_hash(:time => time_cur_string)
-          end
-
-          time_was_string = time_was_string + '/'
-          time_cur_string = time_cur_string + '/'
-
-        end
+        destroy_time_caches_loop time_was, time_strings_hash
+        destroy_time_caches_loop time_cur, time_strings_hash
 
       end
 
+      def destroy_time_caches_loop time, time_strings_hash
+        if time
+          time = fs_time_parse time
+
+          time_string = ""
+
+          time.each do |time_part|
+            #Update String
+            time_string = time_string + time_part.to_s
+            #Check to make sure this hasn't been cleared before.
+            if time_strings_hash[time_string].nil?
+              destroy_cache_hash(:time => time_string)
+            end
+            #Mark the string as have been being cleared.
+            time_strings_hash[time_string] = true
+            #Add the ending slash for next update.
+            time_string = time_string + '/'
+          end
+        end
+      end
+
       def fs_time_parse time 
+        #Break it up to mirror how it is represented in the cache
         time = [time.strftime('%Y').to_i,time.strftime('%m').to_i,time.strftime('%d').to_i,time.strftime('%H').to_i]
       end
 
@@ -113,24 +124,45 @@ module FlagpoleSitta
       self.try(:send, ("#{klass.cs_time_col}_was"))
     end
 
+    def cs_get_state
+      # @cs_original_new_rec = self.new_record?
+      # @cs_original_klass_was = self.class
+      fs_get_state
+    end
+
     #Updates the cache after update of any cache sittaed item.
-    def cache_work assoc_already_visited={}
-      original_klass_was = @_fs_old_state.class
-      original_klass_cur = self.destroyed? ? nil.class : self.class
-      #Have to go through all possibilities so have
-      #to go down and up the chain of inheritance here.
+    def cache_work options={}
+      assoc_already_visited = options[:assoc_already_visited] || {}
+      old_state = (assoc_already_visited.size < 1) ? @_fs_old_state : nil
+      new_state = self
+
+
+      if old_state
+        original_klass_was = old_state.class
+      else
+        original_klass_was = nil
+      end
+
+      original_klass_cur = new_state.has_attribute?('type') ? ((new_state.type.present? ? new_state.type : nil) || new_state.class) : new_state.class
+      if original_klass_cur.class.eql?(String)
+        original_klass_cur = original_klass_cur.constantize
+      end
+
       klass_hash = {}
 
-      fs_get_all_klasses original_klass_cur, klass_hash
-      fs_get_all_klasses original_klass_was, klass_hash
+      if original_klass_was
+        fs_get_all_klasses original_klass_was, klass_hash
+      end
+
+      if !self.destroyed? || (assoc_already_visited.size > 0)
+        fs_get_all_klasses original_klass_cur, klass_hash
+      end
 
       klass_hash.each do |name, klass|
 
-        cache_work_real_work klass, assoc_already_visited
+        cache_work_real_work klass, old_state, new_state, assoc_already_visited
 
       end
-
-      @old_state = nil
 
     end
 
@@ -146,19 +178,17 @@ module FlagpoleSitta
       end
     end
 
-    def cache_work_real_work klass, assoc_already_visited={}
-      new_state = self.destroyed? ? nil : self
-      old_state = @_fs_old_state
+    def cache_work_real_work klass, old_state, new_state, assoc_already_visited={}
 
       if old_state
-        time_was = old_state.send("cs_time_col_was", klass)
         route_id_was = old_state.send("route_id",klass).to_s
+        time_was = old_state.send("cs_time_col_was", klass)
       else
         time_was = nil
         route_id_was = nil
       end
 
-      if new_state
+      if !new_state.destroyed? || assoc_already_visited.size > 0
         route_id_cur = new_state.send("route_id",klass).to_s
         time_cur = new_state.send("cs_time_col", klass)
       else
@@ -167,13 +197,12 @@ module FlagpoleSitta
       end
 
       #AR - Clear all caches related to the old or new route_id
-
       klass.destory_object_cache(route_id_was, route_id_cur)
 
       #AR - Clear all caches related to the old or new time col value
-      # Don't run if time is nil. It can't be index by time
+      # Don't run if both times are nil. It can't be index by time
       # if time is nil anyway.
-      if time_cur && time_was
+      if time_cur || time_was
         klass.destroy_time_caches(time_was, time_cur)
       end
 
@@ -181,8 +210,8 @@ module FlagpoleSitta
       klass.destroy_cache_hash()
 
       if klass.cs_watch_assoc
-        cache_sitta_assoc_update(:belongs_to, klass, new_state, old_state, assoc_already_visited)
-        cache_sitta_assoc_update(:has_one, klass, new_state, old_state, assoc_already_visited)
+        cache_sitta_assoc_update(:belongs_to, klass, self, old_state, assoc_already_visited)
+        cache_sitta_assoc_update(:has_one, klass, self, old_state, assoc_already_visited)
       end
 
     end
@@ -190,6 +219,8 @@ module FlagpoleSitta
     def cache_sitta_assoc_update association, klass, new_state, old_state, assoc_already_visited={}
       klass.reflect_on_all_associations(association).each do |a|
         if klass.cs_watch_assoc.include?(a.name)
+
+          assoc_already_visited[old_state] = true
 
           cache_sitta_assoc_obj_update old_state, a.name, assoc_already_visited
           cache_sitta_assoc_obj_update new_state, a.name, assoc_already_visited
@@ -208,7 +239,7 @@ module FlagpoleSitta
 
         if assoc_obj && !(assoc_already_visited[assoc_obj])
           assoc_already_visited[assoc_obj] = true
-          assoc_obj.cache_work assoc_already_visited
+          assoc_obj.cache_work :assoc_already_visited => assoc_already_visited
         end
       end
     end

@@ -17,7 +17,7 @@ module FlagpoleSitta
       if self.new_record?
         @_fs_old_state = nil
       else
-        incl = self.class.respond_to?(cs_watch_assoc) ? self.class.cs_watch_assoc : nil
+        incl = self.class.respond_to?(:cs_watch_assoc) ? self.class.cs_watch_assoc : nil
         @_fs_old_state = self.class.includes(incl).find(self.id)
       end
     end
@@ -30,15 +30,13 @@ module FlagpoleSitta
 
       def has_existence_hash options = {}
         @_fs_route_id ||= options[:route_id]
-        @_eh_update_ehnum_after ||= options[:update_num_after]
-        @_eh_ehnum_col ||= options[:num_column]
         include FlagpoleSitta::ExistenceHash
       end
 
       def has_brackets_retrieval options = {}
         @_br_safe_content ||= options[:safe_content]
-        @_br_value_field ||= options[:value]
         @_br_key_field ||= options[:key]
+        @_br_value_field ||= options[:value]
         @_br_default_value ||= options[:default_value]
         include FlagpoleSitta::BracketRetrieval
       end

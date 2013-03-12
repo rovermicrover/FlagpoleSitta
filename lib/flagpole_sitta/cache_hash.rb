@@ -47,8 +47,6 @@ class CacheHash
   end
 
 
-  private
-
   #Options :emptystack will make it generate a key for the emptystack instead of the general cache array.
   def hash_cache_key_gen route_id
 

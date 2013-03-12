@@ -6,124 +6,107 @@ module FlagpoleSitta
     extend ActiveSupport::Concern
 
     included do
-      validates_uniqueness_of (@_br_key_field || "key").to_sym
-      validates_presence_of (@_br_key_field || "key").to_sym
-      before_save :fs_get_state
-      before_destroy :fs_get_state
+      before_save :br_get_state
+      before_destroy :br_get_state
       after_commit :br_update
     end
 
     #After update destroy old cache and write new one.
 
-    def br_update_save
-      @_br_alive = true
-      fs_get_state
-    end
-
-    def br_update_destory
-      @_br_alive = false
-      fs_get_state
+    def br_get_state
+      @_br_new_record = self.new_record?
+      @_br_old_key = self.send(self.class.br_key_field.to_s + "_was")
     end
 
     def br_update
-
-      old_key = @_fs_old_state ? @_fs_old_state.send(@_fs_old_state.class.key_field.to_s + "_was") : nil
-
-      if old_key
-        @_fs_old_state.class.initialize_bracket_retrieval_hash
-        bracket_retrieval_hash = @_fs_old_state.class.instance_variable_get(:@bracket_retrieval_hash)
-        bracket_retrieval_hash.delete(old_key)
-      end
-
-      if @_br_alive
-        self.class.initialize_bracket_retrieval_hash
-        key = self.send(self.class.key_field)
-        value = self.send(self.class.value_field)
-        bracket_retrieval_hash[key] = value
-      end
-      
+      if !@_br_new_record
+        self.class.bracket_retrieval_hash.delete(@_br_old_key)
+      end 
     end
 
     module ClassMethods
 
-      def klass
+      def [] key
 
-        self
+        value = bracket_retrieval_hash[key]
+
+        #If its in cache return that, unless blank, then return nil.
+        if value.nil?
+          Redis::Mutex.with_lock(get_br_key + "/lock") do
+            value = bracket_retrieval_hash[key]
+            if value.nil?
+              #If the object is in the database put it into the cache then return it.
+              if obj = self.send("find_by_#{self.br_key_field}", key)
+                value = obj.send(self.br_value_field)
+                bracket_retrieval_hash[key] = value
+              #Else create the corresponding object with the default value.
+              else
+                value = self.br_default_value
+                rec = self.create(self.br_key_field.to_sym => key, self.br_value_field.to_sym => value)
+                bracket_retrieval_hash[key] = rec.send(self.br_value_field)
+              end
+            end
+          end
+        end
+
+        value = br_make_safe value
 
       end
 
-      def initialize_bracket_retrieval_hash
-        if !@bracket_retrieval_hash
+      def bracket_retrieval_hash
+        if @bracket_retrieval_hash.nil?
           @bracket_retrieval_hash = Redis::HashKey.new(get_br_key, :marshal => true)
-        else
-          @bracket_retrieval_hash
         end
+
+        @bracket_retrieval_hash
       end
 
       def get_br_key
+        if @_br_key.nil?
 
-        key = "#{klass}/BracketRetrieval"
+          key = "#{self}/BracketRetrieval"
 
-        key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
-
-      end
-
-      #Will look up the object chain till it finds what it was set to, or not set too.
-      def safe_content?
-        if @_br_safe_content.nil? 
-          @_br_safe_content = (self.superclass.respond_to?(:safe_content) ? self.superclass.safe_content : false)
-        else
-          @_br_safe_content
+          @_br_key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
         end
+
+        @_br_key
+
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too.
-      def key_field
-        @_br_key_field ||= (self.superclass.respond_to?(:key_field) ? self.superclass.key_field : :name)
+      def br_safe_content?
+        if @_br_safe_content.nil? 
+          @br_safe_content = (self.superclass.respond_to?(:br_safe_content) ? self.superclass.br_safe_content : false)
+        end
+          
+        @_br_safe_content
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too.
-      def value_field
-        @_br_value_field ||= (self.superclass.respond_to?(:value_field) ? self.superclass.value_field : :content)
+      def br_key_field
+        @_br_key_field ||= (self.superclass.respond_to?(:br_key_field) ? self.superclass.br_key_field : :name)
+      end
+
+      #Will look up the object chain till it finds what it was set to, or not set too.
+      def br_value_field
+        @_br_value_field ||= (self.superclass.respond_to?(:br_value_field) ? self.superclass.br_value_field : :content)
       end
 
       #Will look up the object chain till it finds what it was set to, or not set too. 
       #Default value cannot be nil.
-      def default_value
-        @_br_default_value ||= (self.superclass.respond_to?(:default_value) ? self.superclass.default_value : "")
+      def br_default_value
+        @_br_default_value ||= (self.superclass.respond_to?(:br_default_value) ? self.superclass.br_default_value : "")
       end
 
-      def make_safe value
+      def br_make_safe value
+        #Return nil if its not present.
+        #Make the buffer html_safe only if flag is set.
         value = value.present? ? value : nil
-        if self.safe_content? && value.respond_to?(:html_safe)
+        if self.br_safe_content? && value.respond_to?(:html_safe)
           value = value.html_safe
         end
 
         value
-      end
-
-      def [] key 
-        initialize_bracket_retrieval_hash
-
-        #If its in cache return that, unless blank, then return nil.
-        if value = @bracket_retrieval_hash[key]
-          #Do nothing object is good to go
-        #Else if the object is in the database put it into the cache then return it.
-        elsif obj = self.send("find_by_#{self.key_field}", key)
-          value = obj.send(self.value_field)
-          @bracket_retrieval_hash[key] = value
-          value = make_safe value
-        #Else create the corresponding object as blank, and return the default value.
-        #The last line there is why this extension should never be used with user generated content.
-        #But return nil if its not present.
-        else
-          value = self.default_value
-          rec = self.create(self.key_field.to_sym => key, self.value_field.to_sym => value)
-          @bracket_retrieval_hash[key] = rec.send(self.value_field)
-        end
-
-        value = make_safe value
-
       end
 
     end

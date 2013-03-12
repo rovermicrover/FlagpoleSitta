@@ -13,19 +13,23 @@ module FlagpoleSitta
       end
 
       def flagpole_cache_read key
-        Rails.cache.read(key.to_s)
+        flagpole_cache[key.to_s]
       end
 
       def flagpole_cache_write key, value
-        Rails.cache.write(key.to_s, value)
+        flagpole_cache[key.to_s] = value
       end
 
       def flagpole_cache_delete key
-        Rails.cache.delete(key.to_s)
+        flagpole_cache.delete(key.to_s)
       end
 
       def flagpole_cache_exist? key
-        Rails.cache.exist?(key.to_s)
+        flagpole_cache.has_key?(key.to_s)
+      end
+
+      def flagpole_cache
+        Redis::HashKey.new("FlagpoleSittaGem/flagpole_cache", :marshal => true)
       end
 
     end

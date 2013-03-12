@@ -10,9 +10,7 @@ module FlagpoleSitta
 
 end
 
-require 'redis/hash_key'
-require 'redis/value'
-require 'redis/lock'
+require 'redis-objects'
 require 'redis-mutex'
 require 'flagpole_sitta/common_fs'
 require 'flagpole_sitta/bracket_retrieval'

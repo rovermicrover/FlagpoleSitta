@@ -14,10 +14,7 @@ Gem::Specification.new do |s|
   s.executables = `git ls-files`.split("\n").map{|f| f =~ /^bin\/(.*)/ ? $1 : nil}.compact
   s.require_path = 'lib'
 
-  #Dependencies
-  #This is just for now until I can test it with out adapters.
   s.add_dependency('redis')
-  s.add_dependency('redis-rails')
   s.add_dependency('redis-objects')
   s.add_dependency('redis-classy')
   s.add_dependency('redis-mutex')
