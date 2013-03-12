@@ -14,6 +14,9 @@ The rottenness and evil in me.
 
 ===This gem should be considered in beta.
 
+== NOTE
+These docks are for the old version of the gem. When the new version is realesed will udpate the docs. This gem has gone through a major overhaul to get ready for rails 4.
+
 ===Before You Use read This.
 https://github.com/rovermicrover/FlagpoleSitta/wiki/Before-You-Use-Read-This
 
@@ -242,6 +245,8 @@ This amounts to a very small specific cache_sitta call. For now its suggested to
 == Footer
 
 More examples to come in the wiki, and in the coming example app.
+
+Edit: The following is true only for the old version. The new versionw when realesed should be thread safe through the use of redis-multex.
 
 If you have made your app multi threaded this gem will break. If your interested in possible making it multithread safe the following link has some good info.
 
