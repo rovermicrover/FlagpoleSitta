@@ -79,7 +79,7 @@ module FlagpoleSittaHelper
       hash = FlagpoleSitta::CommonFs.flagpole_cache_read(key)
     end
 
-    if hash
+    if hash && Rails.application.config.action_controller.perform_caching
       content = hash[:content]
     else
       Redis::Mutex.with_lock(key + "/lock") do
@@ -88,7 +88,7 @@ module FlagpoleSittaHelper
           hash = FlagpoleSitta::CommonFs.flagpole_cache_read(key)
         end
 
-        if not hash
+        if hash.nil? || !(Rails.application.config.action_controller.perform_caching)
 
           content = benchmark("Write fragment #{key} :: FlagpoleSitta") do
             #NOTE This is not safe for .builder xml files, and using capture here is why.
@@ -127,7 +127,9 @@ module FlagpoleSittaHelper
               cache_sitta_associations :objects, associated, key, options[:objects]
             end
 
-            FlagpoleSitta::CommonFs.flagpole_cache_write(key, {:content => content, :associated => associated})
+            if Rails.application.config.action_controller.perform_caching
+              FlagpoleSitta::CommonFs.flagpole_cache_write(key, {:content => content, :associated => associated})
+            end
 
             content
 
