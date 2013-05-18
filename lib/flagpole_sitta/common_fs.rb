@@ -12,24 +12,8 @@ module FlagpoleSitta
         app_hash_namespace + key.to_s
       end
 
-      def flagpole_cache_read key
-        flagpole_cache[key.to_s]
-      end
-
-      def flagpole_cache_write key, value
-        flagpole_cache[key.to_s] = value
-      end
-
-      def flagpole_cache_delete key
-        flagpole_cache.delete(key.to_s)
-      end
-
-      def flagpole_cache_exist? key
-        flagpole_cache.has_key?(key.to_s)
-      end
-
       def flagpole_cache
-        Redis::HashKey.new("FlagpoleSittaGem/flagpole_cache", :marshal => true)
+        Redis::HashKey.new("#{app_hash_namespace}FlagpoleSittaGem/flagpole_cache", :marshal => true)
       end
 
     end

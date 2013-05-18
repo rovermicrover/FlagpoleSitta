@@ -1,6 +1,7 @@
 class CacheHash
 
   def initialize model, route_id = nil
+    
     @model = model.respond_to?(:constantize) ? model.constantize : model
 
     @route_id = route_id
@@ -12,6 +13,7 @@ class CacheHash
   end
 
   def add key, options={}
+
     Rails.logger.info "#{key} is being associated with #{@key_base}"
     @caches[key] = {:placeholder => "For Now"}
 
@@ -27,10 +29,10 @@ class CacheHash
         if hash.present?
 
           #Get all the associated.
-          associated = FlagpoleSitta::CommonFs.flagpole_cache_read(key)[:associated]
+          associated = FlagpoleSitta::CommonFs.flagpole_cache[key][:associated]
           Rails.logger.info "#{key} is being cleared"
           #Destroy the actually cache
-          FlagpoleSitta::CommonFs.flagpole_cache_delete(key)
+          FlagpoleSitta::CommonFs.flagpole_cache.delete(key)
     
           associated.each do |associated_base_key|
             associated_caches = Redis::HashKey.new(associated_base_key, :marshal => true)

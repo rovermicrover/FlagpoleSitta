@@ -22,19 +22,15 @@ module FlagpoleSitta
       options[:name] ? (name = options[:name]) : (name = "object")
 
       if section.class.eql?(Array)
+
         section.each do |s|
-          if options[:block]
-            calls_sitta_set(s, name, options[:block])
-          else
-            calls_sitta_set(s, name, block)
-          end
+          calls_sitta_set(s, name, (options[:block] || block))
         end
+
       else
-        if options[:block]
-          calls_sitta_set(section, name, options[:block])
-        else
-          calls_sitta_set(section, name, block)
-        end
+
+        calls_sitta_set(section, name, (options[:block] || block))
+        
       end
 
     end

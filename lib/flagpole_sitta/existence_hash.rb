@@ -1,14 +1,17 @@
 module FlagpoleSitta
   ##
-  #A ‘hash’ in the cache which you can use to check for the existence of an object
+  #A ‘hash’ in the cache which you can use to check for the existence of an object,
+  #along with its 'count' and last updated.
+  #
+  #The function of the count is for analytics, and the function of the last updated is to
+  #be used with http caching.
   module ExistenceHash
 
     extend ActiveSupport::Concern
 
     included do
-      before_save :eh_update_save
-      before_destroy :eh_update_destory
-      after_commit :update_existence_hash
+      after_destroy :after_destroy_update_existence_hash
+      after_save :after_save_update_existence_hash
     end
 
     module ClassMethods
@@ -33,13 +36,11 @@ module FlagpoleSitta
 
       end
 
-      #Options :emptystack will make it generate a key for the emptystack instead of the general cache array.
       def eh_key_gen
+
         if @_eh_key_gen.nil?
 
-          get_super_with_existence_hash
-
-          key = "#{@superklass}/ExistenceHash"
+          key = "#{get_super_with_existence_hash}/ExistenceHash"
 
           @_eh_key_gen = FlagpoleSitta::CommonFs.flagpole_full_key(key)
 
@@ -49,38 +50,12 @@ module FlagpoleSitta
 
       end
 
-      def ch_key_gen
-
-        if @_ch_key_gen.nil?
-
-          get_super_with_existence_hash
-
-          key = "#{@superklass}/CounterHash"
-
-          @_ch_key_gen = FlagpoleSitta::CommonFs.flagpole_full_key(key)
-        end
-
-        @_ch_key_gen
-
+      def eh_lock_key_gen route_id
+        "#{eh_key_gen}/#{route_id}/lock"
       end
 
-      def ex_ch_init_check_key_gen
+      def master_existance_hash
 
-        if @_ex_ch_init_check_key_gen.nil?
-
-          get_super_with_existence_hash
-
-          key = "#{@superklass}/InitCheck"
-
-          @_ex_ch_init_check_key_gen = FlagpoleSitta::CommonFs.flagpole_full_key(key)
-
-        end
-
-        @_ex_ch_init_check_key_gen
-
-      end
-
-      def existance_hash
         if @existance_hash.nil?
           @existance_hash = Redis::HashKey.new(eh_key_gen, :marshal => true)
         end
@@ -89,83 +64,99 @@ module FlagpoleSitta
 
       end
 
-      def counter_hash
-        if @counter_hash.nil?
-          @counter_hash = Redis::HashKey.new(ch_key_gen, :marshal => true)
-        end
+      def existance_hash
 
-        @counter_hash
+        get_super_with_existence_hash.master_existance_hash
 
       end
 
-      def initcheck
-        if @initcheck.nil?
-          @initcheck = Redis::Value.new(ex_ch_init_check_key_gen, :marshal => true)
-        end
+      def interal_hash count, obj
+        countent = (br_value_field ? obj.send(br_value_field) : nil)
+        updated_at = (obj.respond_to?(:updated_at) ? obj.updated_at : nil)
+        type = obj.has_attribute?('type') ? ((obj.type.present? ? obj.type : nil) || obj.class) : obj.class
 
-        @initcheck
+        {
+          :count => (count || 0), 
+          :type => type, 
+          :updated_at => updated_at,
+          :content => countent,
+          :id => obj.id
+        }
       end
 
+      #Gets a value from the 'hash' in the cache given a key.
+      def get_existence_hash key, create_if_not_found = false
 
-      #Creates the 'hash' in the cache.
+        hash = existance_hash[key]
 
-      def initialize_c_a_hashes
-        if !initcheck.value
+        create = false
 
-          Redis::Mutex.with_lock(ch_key_gen + "/lock") do
-            if !initcheck.value
+        if hash
 
-              if counter_hash.empty? || existance_hash.empty?
+          #Do nothing its fine
 
-                get_super_with_existence_hash.find_each do |m|
-                  counter_hash[m.route_id] = 0
-                  existance_hash[m.route_id] = m.class
-                end
+        else
 
-              end
+          Redis::Mutex.with_lock(eh_lock_key_gen(key)) do
 
-              initcheck_set(true)
+            if obj = self.where(route_id_field.to_sym => key).first
+              hash = interal_hash(0,obj)
+            elsif br_value_field && br_default_value && create_if_not_found
+              create = true
+            else
+              hash = {:nil => true}
             end
+
+            if hash
+              existance_hash[key] = hash
+            end
+
           end
 
         end
 
-        nil
+        if create 
+          value = self.br_default_value
+          obj = self.create(self.route_id_field.to_sym => key, self.br_value_field.to_sym => value)
+          hash = existance_hash[key]
+        end
+
+        if hash && hash[:nil]
+          nil
+        else
+          hash
+        end
 
       end
 
-      #Gets a value from the 'hash' in the cache given a key.
-      def get_existence_hash key
-        initialize_c_a_hashes
-        if (type = existance_hash[key]) && (num = counter_hash[key])
-          {:type => type, :num => num.to_i}
-        else
-          nil
-        end
+      def [] key
+
+        hash = get_existence_hash(key, true)
+
+        value = hash ? hash[:content] : nil
+
+        br_make_safe(value)
 
       end
 
       #Increments a value from the 'hash' in the cache given a key.
       def increment_existence_hash key
-        initialize_c_a_hashes
-
-        if (result = get_existence_hash key)
-          counter_hash.incr(key)
+        get_existence_hash key
+        Redis::Mutex.with_lock(eh_lock_key_gen(key)) do
+          if (hash = existance_hash[key]) && hash[:count]
+            hash[:count] += 1
+            existance_hash[key] = hash
+          end
         end
-
-        result
-
+        get_existence_hash key
       end
 
       #Goes through each entry in the hash returning a key and value
-      def each_existence_hash &block
-        initialize_c_a_hashes
+      def each_existence_hash_count &block
+        existance_hash.each do |key, hash|
 
-        existance_hash.each do |key, type|
-
-          if type.present? && type.eql?(self)
-            cur = get_existence_hash key
-            yield key, cur
+          if hash[:count].present?
+            yield key, hash[:count]
           end
 
         end
@@ -176,77 +167,79 @@ module FlagpoleSitta
 
       protected
 
-      def initcheck_set value
+      def br_value_field
+        if @_br_value_field != false
+          @_br_value_field ||= (self.superclass.respond_to?(:br_value_field) ? self.superclass.br_value_field : false)
+        end
+        @_br_value_field
+      end
+      
+      #Will look up the object chain till it finds what it was set to, or not set too.
+      def br_safe_content?
+        if @_br_safe_content.nil? 
+          @br_safe_content ||= (self.superclass.respond_to?(:br_safe_content) ? self.superclass.br_safe_content : false)
+        end
+        @_br_safe_content
+      end
 
-        @initcheck.value = value
+      #Will look up the object chain till it finds what it was set to, or not set too. 
+      #Default value cannot be nil.
+      def br_default_value
+        if @_br_default_value != false
+          @_br_default_value ||= (self.superclass.respond_to?(:br_default_value) ? self.superclass.br_default_value : false)
+        end
+        @_br_default_value
+      end
 
+      def br_make_safe value
+        value = value.present? ? value : nil
+        if self.br_safe_content? && value.respond_to?(:html_safe)
+          value = value.html_safe
+        end
+
+        value
       end
 
     end
 
     protected
-    def eh_update_save
-      @_eh_alive = true
-      fs_get_state
+
+    def existance_hash
+      self.class.existance_hash
     end
 
-    def eh_update_destory
-      @_eh_alive = false
-      fs_get_state
+
+    def interal_hash count, obj
+      self.class.interal_hash(count, obj)
+    end
+
+    def after_destroy_update_existence_hash
+      Redis::Mutex.with_lock(self.class.eh_lock_key_gen(self.route_id_was)) do
+        if !self.new_record?
+          hash = existance_hash[self.route_id_was]
+          if hash.nil? || self.id_was == hash[:id]
+            existance_hash[self.route_id_was] = {:nil => true}
+          end
+        end
+      end
     end
 
     #Updates the 'hash' on save of any of its records.
-    def update_existence_hash
-      self_was = @_fs_old_state
-      self_cur = self
-
-      #Get the Current Class and the Old Class in case the object changed classes.
-      #If its the base object, ie type is nil, then return class as the old_klass.
-      #If the object doesn't have the type field assume it can't change classes.
-      if self_was
-        old_klass = self_was.class
-        if old_klass.class.eql?(String)
-          old_klass = old_klass.constantize
+    def after_save_update_existence_hash
+      Redis::Mutex.with_lock(self.class.eh_lock_key_gen(self.route_id_was)) do
+        if !self.new_record?
+          hash = existance_hash[self.route_id_was]
+          if existance_hash[self.route_id_was].class.eql?(Hash) && self.id_was == hash[:id]
+            @_eh_old_count = existance_hash[self.route_id_was][:count]
+          end
+          if hash.nil? || self.id_was == hash[:id]
+            existance_hash[self.route_id_was] = {:nil => true}
+          end
         end
-        old_klass.initialize_c_a_hashes
-        old_key = self_was.route_id_was
       end
-
-      if @_eh_alive
-        new_klass = self_cur.has_attribute?('type') ? ((self_cur.type.present? ? self_cur.type : nil) || self_cur.class) : self_cur.class
-        if new_klass.class.eql?(String)
-          new_klass = new_klass.constantize
-        end
-        new_klass.initialize_c_a_hashes
-        new_key = self_cur.route_id
+      Redis::Mutex.with_lock(self.class.eh_lock_key_gen(self.route_id)) do
+        existance_hash[self.route_id] = interal_hash(@_eh_old_count, self)
       end
-      
-      #If its a new record and its alive add it to the 'hash'
-      if self_was.nil? && @_eh_alive
-
-        new_klass.existance_hash[new_key] = self_cur.class
-        new_klass.counter_hash[new_key] = 0
-
-      #Else move forward unless its a new record that is not alive
-      elsif self_was
-
-        #If the record is dying just remove it
-        if !@_eh_alive
-          old_klass.existance_hash.delete(old_key)
-          old_klass.counter_hash.delete(old_key)
-        #Else If everything has changed nil out the old keys
-        #and place info in new keys.
-        elsif !new_key.eql?(old_key) || !new_klass.eql?(old_klass)
-          old_klass.existance_hash.delete(old_key)
-          num = old_klass.counter_hash[old_key]
-          old_klass.counter_hash.delete(old_key)
-
-          new_klass.existance_hash[new_key] = new_klass
-          new_klass.counter_hash[new_key] = num
-        end
-
-      end
-
     end
 
   end

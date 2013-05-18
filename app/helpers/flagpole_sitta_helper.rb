@@ -71,12 +71,10 @@ module FlagpoleSittaHelper
 
     key = FlagpoleSitta::CommonFs.flagpole_full_key(key)
 
-    calls = instance_variable_get(
-      "@" + options[:section] + "_calls"
-    )
+    calls = instance_variable_get("@" + options[:section].to_s + "_calls")
 
     hash = benchmark("Read fragment #{key} :: FlagpoleSitta") do
-      hash = FlagpoleSitta::CommonFs.flagpole_cache_read(key)
+      hash = FlagpoleSitta::CommonFs.flagpole_cache[key]
     end
 
     if hash && Rails.application.config.action_controller.perform_caching
@@ -85,7 +83,7 @@ module FlagpoleSittaHelper
       Redis::Mutex.with_lock(key + "/lock") do
 
         hash = benchmark("Lock Acquired Reading fragment #{key} :: FlagpoleSitta") do
-          hash = FlagpoleSitta::CommonFs.flagpole_cache_read(key)
+          hash = FlagpoleSitta::CommonFs.flagpole_cache[key]
         end
 
         if hash.nil? || !(Rails.application.config.action_controller.perform_caching)
@@ -128,7 +126,7 @@ module FlagpoleSittaHelper
             end
 
             if Rails.application.config.action_controller.perform_caching
-              FlagpoleSitta::CommonFs.flagpole_cache_write(key, {:content => content, :associated => associated})
+              FlagpoleSitta::CommonFs.flagpole_cache[key] = {:content => content, :associated => associated}
             end
 
             content
